@@ -38,3 +38,8 @@ class Mmu:
         '''
 
         self.memory[addr] = data & 0xFF
+
+    def load_rom(self, rom):
+        end_addr = 0x8000
+        for i in range(end_addr):
+            self.memory[i] = rom.data[i]
