@@ -3,6 +3,8 @@ import sys
 import pygame
 import pygame.locals
 
+from constants import MAX_CYCLES_PER_FRAME
+
 from cpu import Cpu
 from mmu import Mmu
 from rom import Rom
@@ -30,6 +32,8 @@ class PyBoy:
         self.rom = Rom(file)
         self.mmu.load_rom(self.rom)
 
+        self.cpu.reset()
+
     def run(self):
         # Main emu loop
         pygame.time.set_timer(self.TIMER, 17)  # ~60 Hz
@@ -41,7 +45,15 @@ class PyBoy:
         self.rom.debug_header()
 
         while True:
-            self.cpu.execute()
+            frame_cycles = 0
+            try:
+                # Execute a frame based on number of cycles we expect per frame
+                while frame_cycles < MAX_CYCLES_PER_FRAME:
+                    frame_cycles += self.cpu.execute()
+
+            except Exception as e:
+                print(e)
+                sys.exit(1)
 
         #     # Update screen
         #     # self._update_screen()

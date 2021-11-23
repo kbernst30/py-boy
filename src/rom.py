@@ -21,13 +21,19 @@ class Rom:
         ROM header is located at addr 0x0100 - 0x014F
         '''
 
+        print("\n---------------------------------\n")
+
         title = ' '.join([chr(c) for c in self.data[0x134:0x143]])
 
         print(f'Entry Point:\n {get_memory_sequence(self.data[0x100:0x104])}')
         print(f'Nintendo Logo:\n {get_memory_sequence(self.data[0x104:0x134])}')
         print(f'Title:\n {title}')
+        print("\n---------------------------------\n")
 
-    def _load_data(self, file):
+    def get_cartridge_type(self) -> int:
+        return self.data[0x0147]
+
+    def _load_data(self, file: str):
         with open("%s" % file, "rb") as f:
             data = []
             for byte in iter(lambda: f.read(1), b''):
