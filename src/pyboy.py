@@ -1,5 +1,7 @@
 import sys
 
+import logging
+
 import pygame
 import pygame.locals
 
@@ -8,6 +10,9 @@ from constants import MAX_CYCLES_PER_FRAME
 from cpu import Cpu
 from mmu import Mmu
 from rom import Rom
+
+
+logger = logging.getLogger(__name__)
 
 
 class PyBoy:
@@ -52,7 +57,7 @@ class PyBoy:
                     frame_cycles += self.cpu.execute()
 
             except Exception as e:
-                print(e)
+                logger.exception(e)
                 sys.exit(1)
 
         #     # Update screen
