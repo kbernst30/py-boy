@@ -23,10 +23,10 @@ class PyBoy:
     def __init__(self):
 
         # Setup pygame
-        pygame.init()
+        # pygame.init()
 
-        self.font = pygame.font.SysFont("monospace", 20)
-        self.window = self._init_canvas()
+        # self.font = pygame.font.SysFont("monospace", 20)
+        # self.window = self._init_canvas()
 
         self.mmu = Mmu()
         self.cpu = Cpu(self.mmu)
@@ -41,7 +41,7 @@ class PyBoy:
 
     def run(self):
         # Main emu loop
-        pygame.time.set_timer(self.TIMER, 17)  # ~60 Hz
+        # pygame.time.set_timer(self.TIMER, 17)  # ~60 Hz
 
         if not self.rom:
             print("No ROM loaded")
@@ -63,9 +63,9 @@ class PyBoy:
         #     # Update screen
         #     # self._update_screen()
 
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    sys.exit()
+            # for event in pygame.event.get():
+            #     if event.type == pygame.QUIT:
+            #         sys.exit()
         #         elif event.type == self.TIMER:
         #             pass
         #             # self.mmu.update_delay_timer()

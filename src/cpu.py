@@ -110,6 +110,8 @@ class Cpu:
         # Interrupts
         self.interrupts_enabled = True
 
+        self.debug_ctr = 0
+
     def reset(self):
         '''
         Reset the CPU and all registers to appropriate values
@@ -118,6 +120,11 @@ class Cpu:
         self.program_counter = PROGRAM_COUNTER_INIT
         self.stack_pointer = STACK_POINTER_INIT
 
+        self.af.value = 0x01B0
+        self.bc.value = 0x0013
+        self.de.value = 0x00D8
+        self.hl.value = 0x014D
+
     def execute(self) -> int:
         '''
         Get the next operation from memory, decode, and execute
@@ -125,20 +132,54 @@ class Cpu:
         :return the number of cycles the operation took
         '''
 
-        op = self.memory.read_byte(self.program_counter)
+        op = self._read_memory(self.program_counter)
         opcode = opcodes_map[op]
         self.program_counter += 1
 
+        # print(opcode.mnemonic)
+
         match opcode.operation:
+            case Operation.ADC: return self._do_add_8_bit(opcode, with_carry=True)
+            case Operation.ADD: return self._do_add_8_bit(opcode)
+            case Operation.AND: return self._do_and(opcode)
             case Operation.CALL: return self._do_call(opcode)
+            case Operation.CCF: return self._do_complement_carry(opcode)
+            case Operation.CP: return self._do_compare(opcode)
+            case Operation.DEC: return self._do_decrement_8_bit(opcode)
+            case Operation.DEC_16_BIT: return self._do_decrement_16_bit(opcode)
             case Operation.DI: return self._do_disable_interrupts(opcode)
             case Operation.INC: return self._do_increment_8_bit(opcode)
+            case Operation.INC_16_BIT: return self._do_increment_16_bit(opcode)
             case Operation.JP: return self._do_jump(opcode)
             case Operation.JR: return self._do_jump_relative(opcode)
             case Operation.LD: return self._do_load(opcode)
             case Operation.LDH: return self._do_load_h(opcode)
             case Operation.NOP: return opcode.cycles
+            case Operation.POP: return self._do_pop(opcode)
+            case Operation.RET: return self._do_return(opcode)
+            case Operation.RST: return self._do_restart(opcode)
             case _: raise Exception(f"Unknown operation encountered 0x{format(op, '02x')} - {opcode.mnemonic}")
+
+    def _read_memory(self, addr: int) -> int:
+        '''
+        Read a byte from memory and return
+
+        :return the data from memory
+        '''
+
+        return self.memory.read_byte(addr)
+
+    def _write_memory(self, addr: int, data: int):
+        '''
+        Write a byte to memory
+        '''
+
+        # Testing for Blargg output
+        if addr == 0xFF01:
+            print(str(self.debug_ctr) + " - " + format(addr, '0x'), format(data, '0x'))
+            self.debug_ctr += 1
+
+        self.memory.write_byte(addr, data)
 
     def _get_next_byte(self) -> int:
         '''
@@ -147,7 +188,7 @@ class Cpu:
         :return an int representing the next byte in memory
         '''
 
-        byte = self.memory.read_byte(self.program_counter)
+        byte = self._read_memory(self.program_counter)
         self.program_counter += 1
         return byte & 0xFF
 
@@ -209,12 +250,12 @@ class Cpu:
 
         return get_bit_val(self.af.lo, Flags.SUBTRACTION.value)
 
-    def _update_zero_flag(self, val: int):
+    def _update_zero_flag(self, val: bool):
         '''
-        Set zero flag if val is zero, otherwise reset it
+        Set zero flag if val is True, otherwise reset it
         '''
 
-        if val == 0:
+        if val:
             self.af.lo = set_bit(self.af.lo, Flags.ZERO.value)
         else:
             self.af.lo = reset_bit(self.af.lo, Flags.ZERO.value)
@@ -239,12 +280,22 @@ class Cpu:
         else:
             self.af.lo = reset_bit(self.af.lo, Flags.HALF_CARRY.value)
 
+    def _update_carry_flag(self, val: bool):
+        '''
+        Set carry flag if val is True, otherwise reset it
+        '''
+
+        if val:
+            self.af.lo = set_bit(self.af.lo, Flags.CARRY.value)
+        else:
+            self.af.lo = reset_bit(self.af.lo, Flags.CARRY.value)
+
     def _push_byte_to_stack(self, byte: int):
         '''
         Push a byte value onto the stack and decrement the stack pointer
         '''
 
-        self.memory.write_byte(self.stack_pointer, byte)
+        self._write_memory(self.stack_pointer, byte)
         self.stack_pointer -= 1
 
     def _pop_byte_from_stack(self) -> int:
@@ -254,7 +305,7 @@ class Cpu:
         :return the popped value
         '''
 
-        val = self.memory.read_byte(self.stack_pointer)
+        val = self._read_memory(self.stack_pointer)
         self.stack_pointer += 1
         return val
 
@@ -280,6 +331,53 @@ class Cpu:
         hi = self._pop_byte_from_stack()
         return ((hi << 8) | lo) & 0xFFFF
 
+    def _do_add_8_bit(self, opcode: OpCode, with_carry=False) -> int:
+        '''
+        Performs an 8-bit add operation and stores result in A, setting appropriate flags
+
+        :return the number of cycles needed to execute this operation
+        '''
+
+        def do_add(val_1: int, val_2: int) -> int:
+            carry = 1 if with_carry and self._is_carry_flag_set() else 0
+            res = val_1 + val_2 + carry
+
+            self._update_zero_flag(res & 0xFF == 0)
+            self._update_sub_flag(False)
+            self._update_carry_flag(res > 0xFF)
+            self._update_half_carry_flag((val_1 & 0xF) + (val_2 & 0xF) + carry > 0xF)
+
+            return res
+
+        match opcode.code:
+            case 0x80: self.af.hi = do_add(self.af.hi, self.bc.hi)
+            case 0x83: self.af.hi = do_add(self.af.hi, self.de.lo)
+            case 0x88: self.af.hi = do_add(self.af.hi, self.bc.hi)
+            case 0x89: self.af.hi = do_add(self.af.hi, self.bc.lo)
+            case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
+        return opcode.cycles
+
+    def _do_and(self, opcode: OpCode) -> int:
+        '''
+        Performs the AND operation and sets appropriate status flags
+
+        :return the number of cycles needed to execute this operation
+        '''
+
+        match opcode.code:
+            case 0xE6:
+                self.af.hi &= self._get_next_byte()
+                val = self.af.hi
+            case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
+        self._update_zero_flag(val == 0)
+        self._update_half_carry_flag(True)
+        self._update_sub_flag(False)
+        self._update_carry_flag(True)
+
+        return opcode.cycles
+
     def _do_call(self, opcode: OpCode) -> int:
         '''
         Pushes the current PC onto the stack and sets the program counter to the appropriate address,
@@ -291,6 +389,14 @@ class Cpu:
         cycles = opcode.cycles
 
         match opcode.code:
+            case 0xCC:
+                if self._is_zero_flag_set():
+                    addr = self._get_next_word()
+                    self._push_word_to_stack(self.program_counter)
+                    self.program_counter = addr
+                else:
+                    self.program_counter += 2
+                    cycles = opcode.alt_cycles
             case 0xCD:
                 addr = self._get_next_word()
                 self._push_word_to_stack(self.program_counter)
@@ -299,6 +405,73 @@ class Cpu:
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return cycles
+
+    def _do_compare(self, opcode: OpCode) -> int:
+        '''
+        Does a compare operation, and updates flags as appropriate
+
+        :return the number of cycles needed to execute this operation
+        '''
+
+        def do_cp(val_1: int, val_2: int):
+            res = val_1 - val_2
+
+            self._update_zero_flag(res & 0xFF == 0)
+            self._update_sub_flag(True)
+            self._update_carry_flag(val_1 < val_2)
+            self._update_half_carry_flag((val_1 & 0xF) - (val_2 & 0xF) < 0)
+
+        match opcode.code:
+            case 0xBF: do_cp(self.af.hi, self.af.hi)
+            case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
+        return opcode.cycles
+
+    def _do_complement_carry(self, opcode: OpCode) -> int:
+        '''
+        Complements the carry flag
+
+        :return the number of cycles needed to execute this operation
+        '''
+
+        self._update_carry_flag(not self._is_carry_flag_set())
+        self._update_half_carry_flag(False)
+        self._update_sub_flag(False)
+
+        return opcode.cycles
+
+    def _do_decrement_8_bit(self, opcode: OpCode) -> int:
+        '''
+        Do 8-bit decrement instruction and update flags as necessary
+
+        :return the number of cycles need to execute this operation
+        '''
+
+        match opcode.code:
+            case 0x0D:
+                self.bc.decrement_lo()
+                val = self.bc.lo
+
+            case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
+        self._update_zero_flag(val == 0)
+        self._update_sub_flag(True)
+        self._update_half_carry_flag(val & 0xF == 0xF)
+
+        return opcode.cycles
+
+    def _do_decrement_16_bit(self, opcode: OpCode) -> int:
+        '''
+        Do 16-bit decrement instruction
+
+        :return the number of cycles need to execute this operation
+        '''
+
+        match opcode.code:
+            case 0x0B: self.bc.decrement()
+            case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
+        return opcode.cycles
 
     def _do_disable_interrupts(self, opcode: OpCode) -> int:
         '''
@@ -318,18 +491,37 @@ class Cpu:
         '''
 
         match opcode.code:
+            case 0x0C:
+                self.bc.increment_lo()
+                val = self.bc.lo
             case 0x14:
                 self.de.increment_hi()
                 val = self.de.hi
             case 0x1C:
                 self.de.increment_lo()
                 val = self.de.lo
+            case 0x3C:
+                self.af.increment_hi()
+                val = self.af.hi
 
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
-        self._update_zero_flag(val)
+        self._update_zero_flag(val == 0)
         self._update_sub_flag(False)
         self._update_half_carry_flag(val & 0xF == 0)
+
+        return opcode.cycles
+
+    def _do_increment_16_bit(self, opcode: OpCode) -> int:
+        '''
+        Do 16-bit increment instruction
+
+        :return the number of cycles need to execute this operation
+        '''
+
+        match opcode.code:
+            case 0x03: self.bc.increment()
+            case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return opcode.cycles
 
@@ -363,6 +555,7 @@ class Cpu:
             case 0x20:
                 self.program_counter = self._get_next_byte_signed() + self.program_counter \
                     if not self._is_zero_flag_set() else self.program_counter + 1
+                cycles = opcode.alt_cycles if self._is_zero_flag_set() else cycles
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return cycles
@@ -375,19 +568,30 @@ class Cpu:
         '''
 
         match opcode.code:
+            case 0x08: self._write_memory(self._get_next_word(), self.stack_pointer)
             case 0x0E: self.bc.lo = self._get_next_byte()
             case 0x11: self.de.value = self._get_next_word()
-            case 0x12: self.memory.write_byte(self.de.value, self.af.hi)
+            case 0x12: self._write_memory(self.de.value, self.af.hi)
             case 0x21: self.hl.value = self._get_next_word()
             case 0x2A:
-                self.af.hi = self.memory.read_byte(self.hl.value)
+                self.af.hi = self._read_memory(self.hl.value)
                 self.hl.increment()
             case 0x31: self.stack_pointer = self._get_next_word()
             case 0x47: self.bc.hi = self.af.hi
+            case 0x57: self.de.hi = self.af.hi
+            case 0x60: self.hl.hi = self.bc.hi
+            case 0x67: self.hl.hi = self.af.hi
+            case 0x6F: self.hl.lo = self.af.hi
+            case 0x73: self._write_memory(self.hl.value, self.de.lo)
+            case 0x78: self.af.hi = self.bc.hi
+            case 0x7A: self.af.hi = self.de.hi
             case 0x7C: self.af.hi = self.hl.hi
             case 0x7D: self.af.hi = self.hl.lo
+            case 0x7F: self.af.hi = self.af.hi
             case 0x3E: self.af.hi = self._get_next_byte()
-            case 0xEA: self.memory.write_byte(self._get_next_word(), self.af.hi)
+            case 0xEA: self._write_memory(self._get_next_word(), self.af.hi)
+            case 0xF9: self.stack_pointer = self.hl.value
+            case 0xFA: self.af.hi = self._read_memory(self._get_next_word())
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return opcode.cycles
@@ -401,10 +605,53 @@ class Cpu:
         '''
 
         match opcode.code:
-            case 0xE0: self.memory.write_byte(0xFF00 | self._get_next_byte(), self.af.hi)
+            case 0xE0: self._write_memory(0xFF00 | self._get_next_byte(), self.af.hi)
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return opcode.cycles
 
-    def _write_register_pair(self, pair: RegisterPair, data: int):
-        pass
+    def _do_pop(self, opcode: OpCode) -> int:
+        '''
+        Pop word of the stack and load it into register pair
+
+        :return the number of cycles needed to execute this operation
+        '''
+
+        match opcode.code:
+            case 0xC1: self.bc.value = self._pop_word_from_stack()
+            case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
+        return opcode.cycles
+
+    def _do_return(self, opcode: OpCode) -> int:
+        '''
+        Do a return from subprocedure, popping PC off of the stack
+
+        :return the number of cycles needed to execute this operation
+        '''
+
+        cycles = opcode.cycles
+
+        match opcode.code:
+            case 0xc8:
+                self.program_counter = self._pop_word_from_stack() \
+                    if self._is_zero_flag_set() else self.program_counter + 1
+                cycles = opcode.alt_cycles if not self._is_zero_flag_set() else cycles
+            case 0xC9: self.program_counter = self._pop_word_from_stack()
+            case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
+        return cycles
+
+    def _do_restart(self, opcode: OpCode) -> int:
+        '''
+        Push current program counter to stack and then restart from predefined address (0x0000 + n)
+
+        :return the number of cycles needed to execute this operation
+        '''
+
+        self._push_word_to_stack(self.program_counter)
+
+        match opcode.code:
+            case 0xFF: self.program_counter = 0x38
+
+        return opcode.cycles
