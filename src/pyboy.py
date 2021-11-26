@@ -9,6 +9,7 @@ from constants import MAX_CYCLES_PER_FRAME
 
 from cpu import Cpu
 from mmu import Mmu
+from ppu import Ppu
 from rom import Rom
 
 
@@ -30,6 +31,7 @@ class PyBoy:
 
         self.mmu = Mmu()
         self.cpu = Cpu(self.mmu)
+        self.ppu = Ppu(self.mmu)
 
         self.rom = None
 
@@ -55,6 +57,8 @@ class PyBoy:
                 # Execute a frame based on number of cycles we expect per frame
                 while frame_cycles < MAX_CYCLES_PER_FRAME:
                     frame_cycles += self.cpu.execute()
+
+                    self.ppu.update_graphics(frame_cycles)
 
             except Exception as e:
                 logger.exception(e)

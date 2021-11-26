@@ -1,5 +1,7 @@
 import logging
 
+from constants import CURRENT_SCANLINE_ADDR, DIVIDER_REGISTER_ADDR
+
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +90,10 @@ class Mmu:
             # Restricted area - do NOT allow writing
             logger.warn(f"Attempted write to restricted addr - 0x{format(addr, '0x')}")
 
+        elif addr == DIVIDER_REGISTER_ADDR or addr == CURRENT_SCANLINE_ADDR:
+            # We cannot write here directly - reset to 0
+            self.memory[addr] = 0
+
         else:
             self.memory[addr] = data & 0xFF
 
@@ -95,3 +101,17 @@ class Mmu:
         end_addr = 0x8000
         for i in range(end_addr):
             self.memory[i] = rom.data[i]
+
+    def update_scanline(self):
+        '''
+        Scanline cannot be writen to directly, so update it using this utility
+        '''
+
+        self.memory[CURRENT_SCANLINE_ADDR] += 1
+
+    def reset_scanline(self):
+        '''
+        We need to be able to reset the current scanline to zero
+        '''
+
+        self.memory[CURRENT_SCANLINE_ADDR] = 0

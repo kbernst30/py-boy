@@ -26,16 +26,16 @@ class RegisterPair:
 
     @property
     def value(self):
-        return ((self.lo << 8) | self.hi) & 0xFFFF
+        return ((self.hi << 8) | self.lo) & 0xFFFF
 
     @value.setter
     def value(self, value):
-        self.lo = value >> 8
-        self.hi = value & 0xF
+        self.hi = value >> 8
+        self.lo = value & 0xFF
 
     def increment(self):
         self.value = self.value + 1
-        if self.value > 255:
+        if self.value > 0xFFFF:
             self.value = 0
 
     def decrement(self):
@@ -132,6 +132,11 @@ class Cpu:
         :return the number of cycles the operation took
         '''
 
+        # if self.debug_ctr < 1258895:
+        if self.debug_ctr < 16510:
+            self._debug()
+            self.debug_ctr += 1
+
         op = self._read_memory(self.program_counter)
         opcode = opcodes_map[op]
         self.program_counter += 1
@@ -155,7 +160,9 @@ class Cpu:
             case Operation.LD: return self._do_load(opcode)
             case Operation.LDH: return self._do_load_h(opcode)
             case Operation.NOP: return opcode.cycles
+            case Operation.OR: return self._do_or(opcode)
             case Operation.POP: return self._do_pop(opcode)
+            case Operation.PUSH: return self._do_push(opcode)
             case Operation.RET: return self._do_return(opcode)
             case Operation.RST: return self._do_restart(opcode)
             case _: raise Exception(f"Unknown operation encountered 0x{format(op, '02x')} - {opcode.mnemonic}")
@@ -175,9 +182,9 @@ class Cpu:
         '''
 
         # Testing for Blargg output
-        if addr == 0xFF01:
-            print(str(self.debug_ctr) + " - " + format(addr, '0x'), format(data, '0x'))
-            self.debug_ctr += 1
+        # if addr == 0xFF01:
+        #     print(str(self.debug_ctr) + " - " + format(addr, '0x'), format(data, '0x'))
+        #     self.debug_ctr += 1
 
         self.memory.write_byte(addr, data)
 
@@ -201,7 +208,7 @@ class Cpu:
         '''
 
         byte = self._get_next_byte()
-        return byte - 256
+        return byte - 256 if byte > 127 else byte
 
     def _get_next_word(self) -> int:
         '''
@@ -295,8 +302,8 @@ class Cpu:
         Push a byte value onto the stack and decrement the stack pointer
         '''
 
-        self._write_memory(self.stack_pointer, byte)
         self.stack_pointer -= 1
+        self._write_memory(self.stack_pointer, byte)
 
     def _pop_byte_from_stack(self) -> int:
         '''
@@ -374,7 +381,7 @@ class Cpu:
         self._update_zero_flag(val == 0)
         self._update_half_carry_flag(True)
         self._update_sub_flag(False)
-        self._update_carry_flag(True)
+        self._update_carry_flag(False)
 
         return opcode.cycles
 
@@ -423,6 +430,7 @@ class Cpu:
 
         match opcode.code:
             case 0xBF: do_cp(self.af.hi, self.af.hi)
+            case 0xFE: do_cp(self.af.hi, self._get_next_byte())
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return opcode.cycles
@@ -521,6 +529,7 @@ class Cpu:
 
         match opcode.code:
             case 0x03: self.bc.increment()
+            case 0x23: self.hl.increment()
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return opcode.cycles
@@ -556,6 +565,10 @@ class Cpu:
                 self.program_counter = self._get_next_byte_signed() + self.program_counter \
                     if not self._is_zero_flag_set() else self.program_counter + 1
                 cycles = opcode.alt_cycles if self._is_zero_flag_set() else cycles
+            case 0x28:
+                self.program_counter = self._get_next_byte_signed() + self.program_counter \
+                    if self._is_zero_flag_set() else self.program_counter + 1
+                cycles = opcode.alt_cycles if not self._is_zero_flag_set() else cycles
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return cycles
@@ -568,6 +581,8 @@ class Cpu:
         '''
 
         match opcode.code:
+            case 0x01: self.bc.value = self._get_next_word()
+            case 0x06: self.bc.hi = self._get_next_byte()
             case 0x08: self._write_memory(self._get_next_word(), self.stack_pointer)
             case 0x0E: self.bc.lo = self._get_next_byte()
             case 0x11: self.de.value = self._get_next_word()
@@ -577,6 +592,7 @@ class Cpu:
                 self.af.hi = self._read_memory(self.hl.value)
                 self.hl.increment()
             case 0x31: self.stack_pointer = self._get_next_word()
+            case 0x44: self.bc.hi = self.hl.hi
             case 0x47: self.bc.hi = self.af.hi
             case 0x57: self.de.hi = self.af.hi
             case 0x60: self.hl.hi = self.bc.hi
@@ -606,7 +622,28 @@ class Cpu:
 
         match opcode.code:
             case 0xE0: self._write_memory(0xFF00 | self._get_next_byte(), self.af.hi)
+            case 0xF0: self.af.hi = self._read_memory(0xFF00 | self._get_next_byte())
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
+        return opcode.cycles
+
+    def _do_or(self, opcode: OpCode) -> int:
+        '''
+        Performs the OR operation and sets appropriate status flags
+
+        :return the number of cycles needed to execute this operation
+        '''
+
+        match opcode.code:
+            case 0xb1:
+                self.af.hi |= self.bc.lo
+                val = self.af.hi
+            case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
+        self._update_zero_flag(val == 0)
+        self._update_half_carry_flag(False)
+        self._update_sub_flag(False)
+        self._update_carry_flag(False)
 
         return opcode.cycles
 
@@ -619,6 +656,25 @@ class Cpu:
 
         match opcode.code:
             case 0xC1: self.bc.value = self._pop_word_from_stack()
+            case 0xD1: self.de.value = self._pop_word_from_stack()
+            case 0xE1: self.hl.value = self._pop_word_from_stack()
+            case 0xF1: self.af.value = self._pop_word_from_stack()
+            case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
+        return opcode.cycles
+
+    def _do_push(self, opcode: OpCode) -> int:
+        '''
+        Push word onto stack
+
+        :return the number of cycles needed to execute this operation
+        '''
+
+        match opcode.code:
+            case 0xC5: self._push_word_to_stack(self.bc.value)
+            case 0xD5: self._push_word_to_stack(self.de.value)
+            case 0xE5: self._push_word_to_stack(self.hl.value)
+            case 0xF5: self._push_word_to_stack(self.af.value)
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return opcode.cycles
@@ -633,7 +689,7 @@ class Cpu:
         cycles = opcode.cycles
 
         match opcode.code:
-            case 0xc8:
+            case 0xC8:
                 self.program_counter = self._pop_word_from_stack() \
                     if self._is_zero_flag_set() else self.program_counter + 1
                 cycles = opcode.alt_cycles if not self._is_zero_flag_set() else cycles
@@ -655,3 +711,24 @@ class Cpu:
             case 0xFF: self.program_counter = 0x38
 
         return opcode.cycles
+
+    # flake8: noqa: E741 E501
+    def _debug(self):
+        a = format(self.af.hi, '02X')
+        f = format(self.af.lo, '02X')
+        b = format(self.bc.hi, '02X')
+        c = format(self.bc.lo, '02X')
+        d = format(self.de.hi, '02X')
+        e = format(self.de.lo, '02X')
+        h = format(self.hl.hi, '02X')
+        l = format(self.hl.lo, '02X')
+        sp = format(self.stack_pointer, '04X')
+        pc = format(self.program_counter, '04X')
+
+        pc_1 = format(self._read_memory(self.program_counter), '02X')
+        pc_2 = format(self._read_memory(self.program_counter + 1), '02X')
+        pc_3 = format(self._read_memory(self.program_counter + 2), '02X')
+        pc_4 = format(self._read_memory(self.program_counter + 3), '02X')
+
+        with open("debug.txt", "a") as debug_file:
+            debug_file.write(f'A: {a} F: {f} B: {b} C: {c} D: {d} E: {e} H: {h} L: {l} SP: {sp} PC: 00:{pc} ({pc_1} {pc_2} {pc_3} {pc_4})\n')
