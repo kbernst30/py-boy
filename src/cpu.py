@@ -4,7 +4,7 @@ from enum import Enum
 
 from constants import PROGRAM_COUNTER_INIT, STACK_POINTER_INIT
 
-from ops import OpCode, Operation, opcodes_map
+from ops import OpCode, Operation, opcodes_map, prefix_opcodes_map
 from mmu import Mmu
 from utils import get_bit_val, reset_bit, set_bit
 
@@ -153,6 +153,7 @@ class Cpu:
         match opcode.operation:
             case Operation.ADC: return self._do_add_8_bit(opcode, with_carry=True)
             case Operation.ADD: return self._do_add_8_bit(opcode)
+            case Operation.ADD_16_BIT: return self._do_add_16_bit(opcode)
             case Operation.AND: return self._do_and(opcode)
             case Operation.CALL: return self._do_call(opcode)
             case Operation.CCF: return self._do_complement_carry(opcode)
@@ -169,8 +170,10 @@ class Cpu:
             case Operation.NOP: return opcode.cycles
             case Operation.OR: return self._do_or(opcode)
             case Operation.POP: return self._do_pop(opcode)
+            case Operation.PREFIX: return opcode.cycles + self._do_prefix()
             case Operation.PUSH: return self._do_push(opcode)
             case Operation.RET: return self._do_return(opcode)
+            case Operation.RRA: return self._do_rra(opcode)
             case Operation.RST: return self._do_restart(opcode)
             case Operation.SBC: return self._do_sub_8_bit(opcode, with_carry=True)
             case Operation.SUB: return self._do_sub_8_bit(opcode)
@@ -192,7 +195,7 @@ class Cpu:
         '''
 
         # Testing for Blargg output
-        if addr == 0xFF01:
+        if addr == 0xFF01 or addr == 0xFF02:
             print(str(self.debug_ctr) + " - " + format(addr, '0x'), format(data, '0x'))
             self.debug_ctr += 1
 
@@ -372,6 +375,29 @@ class Cpu:
             case 0x88: self.af.hi = do_add(self.af.hi, self.bc.hi)
             case 0x89: self.af.hi = do_add(self.af.hi, self.bc.lo)
             case 0xC6: self.af.hi = do_add(self.af.hi, self._get_next_byte())
+            case 0xCE: self.af.hi = do_add(self.af.hi, self._get_next_byte())
+            case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
+        return opcode.cycles
+
+    def _do_add_16_bit(self, opcode: OpCode) -> int:
+        '''
+        Performs an 16-bit add operation
+
+        :return the number of cycles needed to execute this operation
+        '''
+
+        def do_add(val_1: int, val_2: int) -> int:
+            res = val_1 + val_2
+
+            self._update_sub_flag(False)
+            self._update_carry_flag(res > 0xFFFF)
+            self._update_half_carry_flag((val_1 & 0xFF) + (val_2 & 0xFF) > 0xFF)
+
+            return res & 0xFFFF
+
+        match opcode.code:
+            case 0x29: self.hl.value = do_add(self.hl.value, self.hl.value)
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return opcode.cycles
@@ -481,9 +507,24 @@ class Cpu:
             case 0x0D:
                 self.bc.decrement_lo()
                 val = self.bc.lo
+            case 0x1D:
+                self.de.decrement_lo()
+                val = self.de.lo
+            case 0x25:
+                self.hl.decrement_hi()
+                val = self.hl.hi
             case 0x2D:
                 self.hl.decrement_lo()
                 val = self.hl.lo
+            case 0x35:
+                val = self._read_memory(self.hl.value)
+                val += 1
+                if val > 255:
+                    val = 0
+                self._write_memory(self.hl.value, val)
+            case 0x3D:
+                self.af.decrement_hi()
+                val = self.af.hi
 
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
@@ -576,7 +617,11 @@ class Cpu:
         cycles = opcode.cycles
 
         match opcode.code:
+            case 0xC2:
+                self.program_counter = self._get_next_byte() if not self._is_zero_flag_set() else self.program_counter + 1
+                cycles = opcode.alt_cycles if self._is_zero_flag_set() else cycles
             case 0xC3: self.program_counter = self._get_next_word()
+            case 0xE9: self.program_counter = self.hl.value
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return cycles
@@ -601,6 +646,10 @@ class Cpu:
                 self.program_counter = self._get_next_byte_signed() + self.program_counter \
                     if self._is_zero_flag_set() else self.program_counter + 1
                 cycles = opcode.alt_cycles if not self._is_zero_flag_set() else cycles
+            case 0x30:
+                self.program_counter = self._get_next_byte_signed() + self.program_counter \
+                    if not self._is_carry_flag_set() else self.program_counter + 1
+                cycles = opcode.alt_cycles if self._is_carry_flag_set() else cycles
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return cycles
@@ -636,15 +685,23 @@ class Cpu:
             case 0x46: self.bc.hi = self._read_memory(self.hl.value)
             case 0x47: self.bc.hi = self.af.hi
             case 0x4E: self.bc.lo = self._read_memory(self.hl.value)
+            case 0x4F: self.bc.lo = self.af.hi
             case 0x56: self.de.hi = self._read_memory(self.hl.value)
             case 0x57: self.de.hi = self.af.hi
+            case 0x5F: self.de.lo = self.af.hi
             case 0x60: self.hl.hi = self.bc.hi
             case 0x67: self.hl.hi = self.af.hi
+            case 0x6E: self.hl.lo = self._read_memory(self.hl.value)
             case 0x6F: self.hl.lo = self.af.hi
+            case 0x70: self._write_memory(self.hl.value, self.bc.hi)
+            case 0x71: self._write_memory(self.hl.value, self.bc.lo)
+            case 0x72: self._write_memory(self.hl.value, self.de.hi)
             case 0x73: self._write_memory(self.hl.value, self.de.lo)
             case 0x77: self._write_memory(self.hl.value, self.af.hi)
             case 0x78: self.af.hi = self.bc.hi
+            case 0x79: self.af.hi = self.bc.lo
             case 0x7A: self.af.hi = self.de.hi
+            case 0x7B: self.af.hi = self.de.lo
             case 0x7C: self.af.hi = self.hl.hi
             case 0x7D: self.af.hi = self.hl.lo
             case 0x7F: self.af.hi = self.af.hi
@@ -682,6 +739,9 @@ class Cpu:
             case 0xb1:
                 self.af.hi |= self.bc.lo
                 val = self.af.hi
+            case 0xB6:
+                self.af.hi |= self._read_memory(self.hl.value)
+                val = self.af.hi
             case 0xB7:
                 self.af.hi |= self.af.lo
                 val = self.af.hi
@@ -709,6 +769,23 @@ class Cpu:
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return opcode.cycles
+
+    def _do_prefix(self) -> int:
+        '''
+        Do a prefix operation, from the CB opcode
+
+        :return the number of cycles from the prefix operation
+        '''
+
+        op = self._read_memory(self.program_counter)
+        opcode = prefix_opcodes_map[op]
+
+        self.program_counter += 1
+
+        match opcode.operation:
+            case Operation.RR: return self._do_rr(opcode, through_carry=True)
+            case Operation.SRL: return self._do_srl(opcode)
+            case _: raise Exception(f"Unknown prefix operation encountered 0x{format(op, '02x')} - {opcode.mnemonic}")
 
     def _do_push(self, opcode: OpCode) -> int:
         '''
@@ -741,6 +818,10 @@ class Cpu:
                     if self._is_zero_flag_set() else self.program_counter + 1
                 cycles = opcode.alt_cycles if not self._is_zero_flag_set() else cycles
             case 0xC9: self.program_counter = self._pop_word_from_stack()
+            case 0xD0:
+                self.program_counter = self._pop_word_from_stack() \
+                    if not self._is_zero_flag_set() else self.program_counter + 1
+                cycles = opcode.alt_cycles if self._is_zero_flag_set() else cycles
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return cycles
@@ -756,6 +837,73 @@ class Cpu:
 
         match opcode.code:
             case 0xFF: self.program_counter = 0x38
+
+        return opcode.cycles
+
+    def _do_rra(self, opcode: OpCode) -> int:
+        '''
+        Rotate A register right through the carry flag, ensuring zero flag is set to 0
+        '''
+
+        least_significant_bit = get_bit_val(self.af.hi, 0)
+        carry_bit = 1 if self._is_carry_flag_set() else 0
+        res = (carry_bit << 7) | (self.af.hi >> 1)
+
+        self._update_zero_flag(False)
+        self._update_carry_flag(least_significant_bit == 1)
+        self._update_half_carry_flag(False)
+        self._update_sub_flag(False)
+
+        self.af.hi = res
+        return opcode.cycles
+
+    def _do_rr(self, opcode: OpCode, through_carry=False) -> int:
+        '''
+        Rotate value right
+
+        :return the number of cycles needed to execute this operation
+        '''
+
+        def do_rr(val):
+            least_significant_bit = get_bit_val(val, 0)
+            carry_bit = 1 if self._is_carry_flag_set() else 0
+            res = (carry_bit << 7 if through_carry else least_significant_bit) | (val >> 1)
+
+            self._update_zero_flag(res == 0)
+            self._update_carry_flag(least_significant_bit == 1)
+            self._update_half_carry_flag(False)
+            self._update_sub_flag(False)
+
+            return res
+
+        match opcode.code:
+            case 0x19: self.bc.lo = do_rr(self.bc.lo)
+            case 0x1A: self.de.hi = do_rr(self.de.hi)
+            case _: raise Exception(f"Unknown prefix operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
+        return opcode.cycles
+
+    def _do_srl(self, opcode: OpCode) -> int:
+        '''
+        Shift register bits right into carry flag, Most significant bit should be 0
+
+        :return the number of cycles needed to execute this operation
+        '''
+
+        def do_srl(val):
+            least_significant_bit = get_bit_val(val, 0)
+            res = val >> 1
+
+            self._update_zero_flag(res == 0)
+            self._update_carry_flag(least_significant_bit == 1)
+            self._update_half_carry_flag(False)
+            self._update_sub_flag(False)
+
+            return res
+
+        match opcode.code:
+            case 0x38: self.bc.hi = do_srl(self.bc.hi)
+            case _: raise Exception(f"Unknown prefix operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return opcode.cycles
 
@@ -796,6 +944,9 @@ class Cpu:
                 val = self.af.hi
             case 0xAE:
                 self.af.hi ^= self._read_memory(self.hl.value)
+                val = self.af.hi
+            case 0xEE:
+                self.af.hi ^= self._get_next_byte()
                 val = self.af.hi
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
