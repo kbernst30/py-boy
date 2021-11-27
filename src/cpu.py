@@ -111,6 +111,7 @@ class Cpu:
         self.interrupts_enabled = True
 
         self.debug_ctr = 0
+        self.debug_set = set()
 
     def reset(self):
         '''
@@ -132,13 +133,19 @@ class Cpu:
         :return the number of cycles the operation took
         '''
 
-        # if self.debug_ctr < 1258895:
-        if self.debug_ctr < 16510:
-            self._debug()
-            self.debug_ctr += 1
-
         op = self._read_memory(self.program_counter)
         opcode = opcodes_map[op]
+
+        # if self.debug_ctr < 1258895:
+        # if self.debug_ctr < 16510:
+        #     self._debug()
+        #     self.debug_ctr += 1
+        #     self.debug_set.add(f"{format(op, '02X')} - {opcode.mnemonic} - {opcode.cycles} - {opcode.alt_cycles}")
+
+        #     if self.debug_ctr == 16510:
+        #         for item in self.debug_set:
+        #             print(item)
+
         self.program_counter += 1
 
         # print(opcode.mnemonic)
@@ -165,6 +172,7 @@ class Cpu:
             case Operation.PUSH: return self._do_push(opcode)
             case Operation.RET: return self._do_return(opcode)
             case Operation.RST: return self._do_restart(opcode)
+            case Operation.XOR: return self._do_xor(opcode)
             case _: raise Exception(f"Unknown operation encountered 0x{format(op, '02x')} - {opcode.mnemonic}")
 
     def _read_memory(self, addr: int) -> int:
@@ -361,6 +369,7 @@ class Cpu:
             case 0x83: self.af.hi = do_add(self.af.hi, self.de.lo)
             case 0x88: self.af.hi = do_add(self.af.hi, self.bc.hi)
             case 0x89: self.af.hi = do_add(self.af.hi, self.bc.lo)
+            case 0xC6: self.af.hi = do_add(self.af.hi, self._get_next_byte())
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return opcode.cycles
@@ -396,6 +405,14 @@ class Cpu:
         cycles = opcode.cycles
 
         match opcode.code:
+            case 0xC4:
+                if not self._is_zero_flag_set():
+                    addr = self._get_next_word()
+                    self._push_word_to_stack(self.program_counter)
+                    self.program_counter = addr
+                else:
+                    self.program_counter += 2
+                    cycles = opcode.alt_cycles
             case 0xCC:
                 if self._is_zero_flag_set():
                     addr = self._get_next_word()
@@ -456,6 +473,9 @@ class Cpu:
         '''
 
         match opcode.code:
+            case 0x05:
+                self.bc.decrement_hi()
+                val = self.bc.hi
             case 0x0D:
                 self.bc.decrement_lo()
                 val = self.bc.lo
@@ -508,6 +528,12 @@ class Cpu:
             case 0x1C:
                 self.de.increment_lo()
                 val = self.de.lo
+            case 0x24:
+                self.hl.increment_hi()
+                val = self.hl.hi
+            case 0x2C:
+                self.hl.increment_lo()
+                val = self.hl.lo
             case 0x3C:
                 self.af.increment_hi()
                 val = self.af.hi
@@ -529,6 +555,7 @@ class Cpu:
 
         match opcode.code:
             case 0x03: self.bc.increment()
+            case 0x13: self.de.increment()
             case 0x23: self.hl.increment()
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
@@ -587,11 +614,18 @@ class Cpu:
             case 0x0E: self.bc.lo = self._get_next_byte()
             case 0x11: self.de.value = self._get_next_word()
             case 0x12: self._write_memory(self.de.value, self.af.hi)
+            case 0x1A: self.af.hi = self._read_memory(self.de.value)
             case 0x21: self.hl.value = self._get_next_word()
+            case 0x22:
+                self._write_memory(self.hl.value, self.af.hi)
+                self.hl.increment()
             case 0x2A:
                 self.af.hi = self._read_memory(self.hl.value)
                 self.hl.increment()
             case 0x31: self.stack_pointer = self._get_next_word()
+            case 0x32:
+                self._write_memory(self.hl.value, self.af.hi)
+                self.hl.decrement()
             case 0x44: self.bc.hi = self.hl.hi
             case 0x47: self.bc.hi = self.af.hi
             case 0x57: self.de.hi = self.af.hi
@@ -599,6 +633,7 @@ class Cpu:
             case 0x67: self.hl.hi = self.af.hi
             case 0x6F: self.hl.lo = self.af.hi
             case 0x73: self._write_memory(self.hl.value, self.de.lo)
+            case 0x77: self._write_memory(self.hl.value, self.af.hi)
             case 0x78: self.af.hi = self.bc.hi
             case 0x7A: self.af.hi = self.de.hi
             case 0x7C: self.af.hi = self.hl.hi
@@ -709,6 +744,26 @@ class Cpu:
 
         match opcode.code:
             case 0xFF: self.program_counter = 0x38
+
+        return opcode.cycles
+
+    def _do_xor(self, opcode: OpCode) -> int:
+        '''
+        Performs the OR operation and sets appropriate status flags
+
+        :return the number of cycles needed to execute this operation
+        '''
+
+        match opcode.code:
+            case 0xA9:
+                self.af.hi ^= self.bc.lo
+                val = self.af.hi
+            case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
+        self._update_zero_flag(val == 0)
+        self._update_half_carry_flag(False)
+        self._update_sub_flag(False)
+        self._update_carry_flag(False)
 
         return opcode.cycles
 

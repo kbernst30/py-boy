@@ -56,9 +56,10 @@ class PyBoy:
             try:
                 # Execute a frame based on number of cycles we expect per frame
                 while frame_cycles < MAX_CYCLES_PER_FRAME:
-                    frame_cycles += self.cpu.execute()
+                    cycles = self.cpu.execute()
+                    frame_cycles += cycles
 
-                    self.ppu.update_graphics(frame_cycles)
+                    self.ppu.update_graphics(cycles)
 
             except Exception as e:
                 logger.exception(e)
