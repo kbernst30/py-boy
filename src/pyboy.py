@@ -22,16 +22,8 @@ logger = logging.getLogger(__name__)
 class PyBoy:
 
     DISPLAY_SCALE = 5
-    # TIMER = pygame.USEREVENT + 1
 
     def __init__(self):
-
-        # Setup pygame
-        # pygame.init()
-
-        # self.font = pygame.font.SysFont("monospace", 20)
-        # self.window = self._init_canvas()
-
         self.main_display = MainDisplay()
 
         self.mmu = Mmu()
@@ -58,8 +50,10 @@ class PyBoy:
 
         self.main_display.show()
 
-        while True:
+        running = True
+        while running:
             frame_cycles = 0
+
             try:
                 # Execute a frame based on number of cycles we expect per frame
                 while frame_cycles < MAX_CYCLES_PER_FRAME:
@@ -67,6 +61,7 @@ class PyBoy:
                     frame_cycles += cycles
 
                     self.ppu.update_graphics(cycles)
+                    self.ppu.debug_vram(self.main_display)
 
             except Exception as e:
                 logger.exception(e)
@@ -77,7 +72,10 @@ class PyBoy:
                 #     sys.exit()
 
                 if event.type == sdl2.SDL_QUIT:
-                    sys.exit()
+                    running = False
+                    break
+
+            self.main_display.refresh()
 
         #     # Update screen
         #     # self._update_screen()
@@ -90,9 +88,9 @@ class PyBoy:
         #             # self.mmu.update_delay_timer()
         #             # self.mmu.update_sound_timer()
 
-    def _init_canvas(self):
-        width = 144 * self.DISPLAY_SCALE
-        height = 160 * self.DISPLAY_SCALE
+    # def _init_canvas(self):
+    #     width = 144 * self.DISPLAY_SCALE
+    #     height = 160 * self.DISPLAY_SCALE
 
         # if self.debug:
         #     height += 500

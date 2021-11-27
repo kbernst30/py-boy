@@ -64,6 +64,8 @@ class Ppu:
         # It takes 456 clock cycles to draw one scanline
         self.scanline_counter = CYCLES_PER_SCANLINE
 
+        self.debug = True
+
     def update_graphics(self, cycles: int):
         '''
         Attempt to update the graphics. If we have taken more than the number
@@ -80,7 +82,8 @@ class Ppu:
             self.scanline_counter -= cycles
 
         # We have run the number of necessary cycles to draw a scanline
-        if self.scanline_counter <= 0:
+        if self.scanline_counter < 0:
+            # print(self.scanline_counter)
             self.scanline_counter += CYCLES_PER_SCANLINE
 
             # TODO Draw the next scanline
@@ -106,5 +109,17 @@ class Ppu:
 
         if not self.lcd_control.is_lcd_enabled():
             # LCD is disabled, this means we are in VBlank, so reset scanline
-            self.scanline_counter = CYCLES_PER_SCANLINE
-            self.memory.reset_scanline()
+            # self.scanline_counter = CYCLES_PER_SCANLINE
+            # self.memory.reset_scanline()
+            pass
+
+    def debug_vram(self, display):
+        # print(self.memory.read_byte(0x8800))
+        # for i in range(0x8000, 0x9800):
+        #     if self.debug:
+        #         if self.memory.read_byte(i) != 0:
+        #             self.debug = False
+        #             print(format(i, '04X'), format(self.memory.read_byte(i), '02X'))
+        if self.debug and self.memory.read_byte(0x8000) > 0:
+            self.debug = False
+            print(format(0x8000, '04X'), format(self.memory.read_byte(0x8000), '02X'))

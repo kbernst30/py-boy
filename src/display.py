@@ -1,13 +1,64 @@
 import sdl2
 
+from constants import SCREEN_HEIGHT, SCREEN_WIDTH
+
+
+class SoftwareRenderer(sdl2.ext.SoftwareSpriteRenderSystem):
+    def __init__(self, window):
+        super(SoftwareRenderer, self).__init__(window)
+        sdl2.ext.fill(self.surface, sdl2.ext.Color(255, 255, 255))
+
+    # def render(self, components):
+    #     sdl2.ext.fill(self.surface, sdl2.ext.Color(255, 255, 255))
+    #     super(SoftwareRenderer, self).render(components)
+
+    def draw(self, color, area):
+        sdl2.ext.fill(self.surface, color, area)
+
+
+class Pixel(sdl2.ext.Entity):
+
+    def __init__(self, world, sprite, posx=0, posy=0):
+        self.sprite = sprite
+        self.sprite.position = posx, posy
+
 
 class MainDisplay:
 
+    DISPLAY_FACTOR = 4
+
     def __init__(self):
-        self.window = sdl2.ext.Window("Hello World!", size=(640, 480))
+        self.window = sdl2.ext.Window(
+            "Py Boy",
+            size=(
+                SCREEN_WIDTH * self.DISPLAY_FACTOR,
+                SCREEN_HEIGHT * self.DISPLAY_FACTOR
+            )
+        )
+
+        self.renderer = SoftwareRenderer(self.window)
+        self.world = sdl2.ext.World()
+
+        self.world.add_system(self.renderer)
+
+        self.factory = sdl2.ext.SpriteFactory(sdl2.ext.SOFTWARE)
 
     def show(self):
         self.window.show()
 
-        processor = sdl2.ext.TestEventProcessor()
-        processor.run(self.window)
+        # processor = sdl2.ext.TestEventProcessor()
+        # processor.run(self.window)
+        self.draw(10, 10)
+
+    def refresh(self):
+        self.window.refresh()
+
+    def draw(self, x: int, y: int):
+        color = sdl2.ext.Color(0, 0, 0)  # TODO Proper color
+
+        x1 = x * self.DISPLAY_FACTOR
+        x2 = x1 + self.DISPLAY_FACTOR
+        y1 = self.DISPLAY_FACTOR
+        y2 = self.DISPLAY_FACTOR
+
+        self.renderer.draw(color, (x1, x2, y1, y2))

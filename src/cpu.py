@@ -137,10 +137,10 @@ class Cpu:
         opcode = opcodes_map[op]
 
         # if self.debug_ctr < 1258895:
-        # if self.debug_ctr < 16510:
-        #     self._debug()
-        #     self.debug_ctr += 1
-        #     self.debug_set.add(f"{format(op, '02X')} - {opcode.mnemonic} - {opcode.cycles} - {opcode.alt_cycles}")
+        if self.debug_ctr < 16510:
+            self._debug()
+            self.debug_ctr += 1
+            self.debug_set.add(f"{format(op, '02X')} - {opcode.mnemonic} - {opcode.cycles} - {opcode.alt_cycles}")
 
         #     if self.debug_ctr == 16510:
         #         for item in self.debug_set:
@@ -172,6 +172,8 @@ class Cpu:
             case Operation.PUSH: return self._do_push(opcode)
             case Operation.RET: return self._do_return(opcode)
             case Operation.RST: return self._do_restart(opcode)
+            case Operation.SBC: return self._do_sub_8_bit(opcode, with_carry=True)
+            case Operation.SUB: return self._do_sub_8_bit(opcode)
             case Operation.XOR: return self._do_xor(opcode)
             case _: raise Exception(f"Unknown operation encountered 0x{format(op, '02x')} - {opcode.mnemonic}")
 
@@ -479,6 +481,9 @@ class Cpu:
             case 0x0D:
                 self.bc.decrement_lo()
                 val = self.bc.lo
+            case 0x2D:
+                self.hl.decrement_lo()
+                val = self.hl.lo
 
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
@@ -619,6 +624,7 @@ class Cpu:
             case 0x22:
                 self._write_memory(self.hl.value, self.af.hi)
                 self.hl.increment()
+            case 0x26: self.hl.hi = self._get_next_byte()
             case 0x2A:
                 self.af.hi = self._read_memory(self.hl.value)
                 self.hl.increment()
@@ -627,7 +633,10 @@ class Cpu:
                 self._write_memory(self.hl.value, self.af.hi)
                 self.hl.decrement()
             case 0x44: self.bc.hi = self.hl.hi
+            case 0x46: self.bc.hi = self._read_memory(self.hl.value)
             case 0x47: self.bc.hi = self.af.hi
+            case 0x4E: self.bc.lo = self._read_memory(self.hl.value)
+            case 0x56: self.de.hi = self._read_memory(self.hl.value)
             case 0x57: self.de.hi = self.af.hi
             case 0x60: self.hl.hi = self.bc.hi
             case 0x67: self.hl.hi = self.af.hi
@@ -672,6 +681,9 @@ class Cpu:
         match opcode.code:
             case 0xb1:
                 self.af.hi |= self.bc.lo
+                val = self.af.hi
+            case 0xB7:
+                self.af.hi |= self.af.lo
                 val = self.af.hi
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
@@ -747,6 +759,30 @@ class Cpu:
 
         return opcode.cycles
 
+    def _do_sub_8_bit(self, opcode: OpCode, with_carry=False) -> int:
+        '''
+        Performs an 8-bit sub operation and stores result in A, setting appropriate flags
+
+        :return the number of cycles needed to execute this operation
+        '''
+
+        def do_sub(val_1: int, val_2: int) -> int:
+            carry = 1 if with_carry and self._is_carry_flag_set() else 0
+            res = val_1 - val_2 - carry
+
+            self._update_zero_flag(res & 0xFF == 0)
+            self._update_sub_flag(True)
+            self._update_carry_flag(res < 0)
+            self._update_half_carry_flag((val_1 & 0xF) < (val_2 & 0xF) + carry)
+
+            return res if res >= 0 else 256 + res
+
+        match opcode.code:
+            case 0xD6: self.af.hi = do_sub(self.af.hi, self._get_next_byte())
+            case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
+        return opcode.cycles
+
     def _do_xor(self, opcode: OpCode) -> int:
         '''
         Performs the OR operation and sets appropriate status flags
@@ -757,6 +793,9 @@ class Cpu:
         match opcode.code:
             case 0xA9:
                 self.af.hi ^= self.bc.lo
+                val = self.af.hi
+            case 0xAE:
+                self.af.hi ^= self._read_memory(self.hl.value)
                 val = self.af.hi
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
