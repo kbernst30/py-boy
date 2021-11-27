@@ -190,9 +190,9 @@ class Cpu:
         '''
 
         # Testing for Blargg output
-        # if addr == 0xFF01:
-        #     print(str(self.debug_ctr) + " - " + format(addr, '0x'), format(data, '0x'))
-        #     self.debug_ctr += 1
+        if addr == 0xFF01:
+            print(str(self.debug_ctr) + " - " + format(addr, '0x'), format(data, '0x'))
+            self.debug_ctr += 1
 
         self.memory.write_byte(addr, data)
 

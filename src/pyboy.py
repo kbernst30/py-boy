@@ -2,12 +2,15 @@ import sys
 
 import logging
 
-import pygame
-import pygame.locals
+import sdl2
+
+# import pygame
+# import pygame.locals
 
 from constants import MAX_CYCLES_PER_FRAME
 
 from cpu import Cpu
+from display import MainDisplay
 from mmu import Mmu
 from ppu import Ppu
 from rom import Rom
@@ -19,7 +22,7 @@ logger = logging.getLogger(__name__)
 class PyBoy:
 
     DISPLAY_SCALE = 5
-    TIMER = pygame.USEREVENT + 1
+    # TIMER = pygame.USEREVENT + 1
 
     def __init__(self):
 
@@ -28,6 +31,8 @@ class PyBoy:
 
         # self.font = pygame.font.SysFont("monospace", 20)
         # self.window = self._init_canvas()
+
+        self.main_display = MainDisplay()
 
         self.mmu = Mmu()
         self.cpu = Cpu(self.mmu)
@@ -51,6 +56,8 @@ class PyBoy:
 
         self.rom.debug_header()
 
+        self.main_display.show()
+
         while True:
             frame_cycles = 0
             try:
@@ -64,6 +71,13 @@ class PyBoy:
             except Exception as e:
                 logger.exception(e)
                 sys.exit(1)
+
+            for event in sdl2.ext.get_events():
+                # if event.type == SDL_WINDOWEVENT and event.window.event == SDL_WINDOWEVENT_CLOSE:
+                #     sys.exit()
+
+                if event.type == sdl2.SDL_QUIT:
+                    sys.exit()
 
         #     # Update screen
         #     # self._update_screen()
@@ -83,12 +97,12 @@ class PyBoy:
         # if self.debug:
         #     height += 500
 
-        size = width, height
-        window = pygame.display.set_mode(size, pygame.locals.DOUBLEBUF)
-        window.set_alpha(None)
-        pygame.display.flip()
+        # size = width, height
+        # window = pygame.display.set_mode(size, pygame.locals.DOUBLEBUF)
+        # window.set_alpha(None)
+        # pygame.display.flip()
 
-        self.canvas = pygame.display.get_surface()
-        self.canvas.fill((0, 0, 0))
+        # self.canvas = pygame.display.get_surface()
+        # self.canvas.fill((0, 0, 0))
 
-        return window
+        # return window

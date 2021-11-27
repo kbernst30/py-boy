@@ -43,10 +43,26 @@ category = "main"
 optional = false
 python-versions = ">=3.6"
 
+[[package]]
+name = "pysdl2"
+version = "0.9.9"
+description = "Python SDL2 bindings"
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
+name = "pysdl2-dll"
+version = "2.0.16"
+description = "Pre-built SDL2 binaries for PySDL2"
+category = "main"
+optional = false
+python-versions = "*"
+
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "858af8ed6ff474dffe8dc90b62b55727ec7bd52021292625b71713729a0138d2"
+content-hash = "d465dbb1c42b0a28fb8f5dc070bcaa48038d97f8cd83988e36fd46841700e561"
 
 [metadata.files]
 flake8 = [
@@ -124,4 +140,17 @@ pygame = [
     {file = "pygame-2.1.0-pp37-pypy37_pp73-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:0227728f2ef751fac43b89f4bcc5c65ce39c855b2a3391ddf2e6024dd667e6bd"},
     {file = "pygame-2.1.0-pp37-pypy37_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4ab5aba8677d135b94c4714e8256efdfffefc164f354a4d05b846588caf43b99"},
     {file = "pygame-2.1.0.tar.gz", hash = "sha256:232e51104db0e573221660d172af8e6fc2c0fda183c5dbf2aa52170f29aa9ec9"},
+]
+pysdl2 = [
+    {file = "PySDL2-0.9.9-py3-none-any.whl", hash = "sha256:af5af5e6501934ca98d4344bd3362b076828e5cb6698af64db7d1b72353b4580"},
+    {file = "PySDL2-0.9.9.tar.gz", hash = "sha256:45879ae588038d7cf7cb0289ae47af60722b394d0efa527bf4327103dc4dc918"},
+]
+pysdl2-dll = [
+    {file = "pysdl2-dll-2.0.16.tar.gz", hash = "sha256:32a4233d54570d5b64d9653ec85025ac337fec47de76bbde920b6f3d867328c7"},
+    {file = "pysdl2_dll-2.0.16-py2.py3-none-macosx_10_6_x86_64.whl", hash = "sha256:934b1df37d5b61426b2b7394906a718d0c065535dc0eb888b5eb2fdee76f7566"},
+    {file = "pysdl2_dll-2.0.16-py2.py3-none-manylinux2014_i686.whl", hash = "sha256:1f1a7855ba5dc9e2e8da6f3fe2d54a24c6118e1dc1db655796358c97d8e9f7d5"},
+    {file = "pysdl2_dll-2.0.16-py2.py3-none-manylinux2014_x86_64.whl", hash = "sha256:f25b413039d6cfcb92045b4665b21eac5aa826dee17eeca6b2b06c4efdd1aad1"},
+    {file = "pysdl2_dll-2.0.16-py2.py3-none-manylinux_2_24_x86_64.whl", hash = "sha256:cde22425dd98cf40a34e4dc15f3260eb2f556b8e1ee66e6bece0daa367324545"},
+    {file = "pysdl2_dll-2.0.16-py2.py3-none-win32.whl", hash = "sha256:edd599b3845772d4ae31d9e7f20665d169a8fe42cff636eaedf0a9344fb58458"},
+    {file = "pysdl2_dll-2.0.16-py2.py3-none-win_amd64.whl", hash = "sha256:90ad157385c3ef549301a112c448f9060832f5f098c0209acdeb655806c6200d"},
 ]
