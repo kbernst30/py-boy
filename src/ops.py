@@ -285,7 +285,7 @@ opcodes = [
     OpCode(0xCE, "ADC A, d8", Operation.ADC, 2, 8),
     OpCode(0xCF, "RST 08H", Operation.RST, 1, 16),
 
-    OpCode(0xD0, "RET NZ", Operation.RET, 1, 20, 8),
+    OpCode(0xD0, "RET NC", Operation.RET, 1, 20, 8),
     OpCode(0xD1, "POP DE", Operation.POP, 1, 12),
     OpCode(0xD2, "JP NC, a16", Operation.JP, 3, 16, 12),
     # OpCode(0xD3, Operation.JP, 3, 16),
