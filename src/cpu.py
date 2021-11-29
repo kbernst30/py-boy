@@ -6,7 +6,7 @@ from constants import PROGRAM_COUNTER_INIT, STACK_POINTER_INIT
 
 from ops import OpCode, Operation, opcodes_map, prefix_opcodes_map
 from mmu import Mmu
-from utils import get_bit_val, reset_bit, set_bit
+from utils import bit_negate, get_bit_val, is_bit_set, reset_bit, set_bit
 
 
 logger = logging.getLogger(__name__)
@@ -159,6 +159,7 @@ class Cpu:
             case Operation.CALL: return self._do_call(opcode)
             case Operation.CCF: return self._do_complement_carry(opcode)
             case Operation.CP: return self._do_compare(opcode)
+            case Operation.CPL: return self._do_complement(opcode)
             case Operation.DEC: return self._do_decrement_8_bit(opcode)
             case Operation.DEC_16_BIT: return self._do_decrement_16_bit(opcode)
             case Operation.DI: return self._do_disable_interrupts(opcode)
@@ -175,9 +176,13 @@ class Cpu:
             case Operation.PREFIX: return opcode.cycles + self._do_prefix()
             case Operation.PUSH: return self._do_push(opcode)
             case Operation.RET: return self._do_return(opcode)
+            case Operation.RLA: return self._do_rla(opcode)
+            case Operation.RLCA: return self._do_rlca(opcode)
             case Operation.RRA: return self._do_rra(opcode)
+            case Operation.RRCA: return self._do_rrca(opcode)
             case Operation.RST: return self._do_restart(opcode)
             case Operation.SBC: return self._do_sub_8_bit(opcode, with_carry=True)
+            case Operation.SCF: return self._do_set_carry_flag(opcode)
             case Operation.SUB: return self._do_sub_8_bit(opcode)
             case Operation.XOR: return self._do_xor(opcode)
             case _: raise Exception(f"Unknown operation encountered 0x{format(op, '02x')} - {opcode.mnemonic}")
@@ -374,9 +379,21 @@ class Cpu:
 
         match opcode.code:
             case 0x80: self.af.hi = do_add(self.af.hi, self.bc.hi)
+            case 0x81: self.af.hi = do_add(self.af.hi, self.bc.lo)
+            case 0x82: self.af.hi = do_add(self.af.hi, self.de.hi)
             case 0x83: self.af.hi = do_add(self.af.hi, self.de.lo)
+            case 0x84: self.af.hi = do_add(self.af.hi, self.hl.hi)
+            case 0x85: self.af.hi = do_add(self.af.hi, self.hl.lo)
+            case 0x86: self.af.hi = do_add(self.af.hi, self._read_memory(self.hl.value))
+            case 0x87: self.af.hi = do_add(self.af.hi, self.af.hi)
             case 0x88: self.af.hi = do_add(self.af.hi, self.bc.hi)
             case 0x89: self.af.hi = do_add(self.af.hi, self.bc.lo)
+            case 0x8A: self.af.hi = do_add(self.af.hi, self.de.hi)
+            case 0x8B: self.af.hi = do_add(self.af.hi, self.de.lo)
+            case 0x8C: self.af.hi = do_add(self.af.hi, self.hl.hi)
+            case 0x8D: self.af.hi = do_add(self.af.hi, self.hl.lo)
+            case 0x8E: self.af.hi = do_add(self.af.hi, self._read_memory(self.hl.value))
+            case 0x8F: self.af.hi = do_add(self.af.hi, self.af.hi)
             case 0xC6: self.af.hi = do_add(self.af.hi, self._get_next_byte())
             case 0xCE: self.af.hi = do_add(self.af.hi, self._get_next_byte())
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
@@ -400,6 +417,8 @@ class Cpu:
             return res & 0xFFFF
 
         match opcode.code:
+            case 0x09: self.hl.value = do_add(self.hl.value, self.bc.value)
+            case 0x19: self.hl.value = do_add(self.hl.value, self.de.value)
             case 0x29: self.hl.value = do_add(self.hl.value, self.hl.value)
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
@@ -413,6 +432,30 @@ class Cpu:
         '''
 
         match opcode.code:
+            case 0xA0:
+                self.af.hi &= self.bc.hi
+                val = self.af.hi
+            case 0xA1:
+                self.af.hi &= self.bc.lo
+                val = self.af.hi
+            case 0xA2:
+                self.af.hi &= self.de.hi
+                val = self.af.hi
+            case 0xA3:
+                self.af.hi &= self.de.lo
+                val = self.af.hi
+            case 0xA4:
+                self.af.hi &= self.hl.hi
+                val = self.af.hi
+            case 0xA5:
+                self.af.hi &= self.hl.lo
+                val = self.af.hi
+            case 0xA6:
+                self.af.hi &= self._read_memory(self.hl.value)
+                val = self.af.hi
+            case 0xA7:
+                self.af.hi &= self.af.hi
+                val = self.af.hi
             case 0xE6:
                 self.af.hi &= self._get_next_byte()
                 val = self.af.hi
@@ -422,6 +465,85 @@ class Cpu:
         self._update_half_carry_flag(True)
         self._update_sub_flag(False)
         self._update_carry_flag(False)
+
+        return opcode.cycles
+
+    def _do_bit(self, opcode: OpCode) -> int:
+        '''
+        Test bit in given register
+
+        :return the number of cycles needed to execute this operation
+        '''
+
+        match opcode.code:
+            case 0x40: self._update_zero_flag(not is_bit_set(self.bc.hi, 0))
+            case 0x41: self._update_zero_flag(not is_bit_set(self.bc.lo, 0))
+            case 0x42: self._update_zero_flag(not is_bit_set(self.de.hi, 0))
+            case 0x43: self._update_zero_flag(not is_bit_set(self.de.lo, 0))
+            case 0x44: self._update_zero_flag(not is_bit_set(self.hl.hi, 0))
+            case 0x45: self._update_zero_flag(not is_bit_set(self.hl.lo, 0))
+            case 0x46: self._update_zero_flag(not is_bit_set(self._read_memory(self.hl.value), 0))
+            case 0x47: self._update_zero_flag(not is_bit_set(self.af.hi, 0))
+            case 0x48: self._update_zero_flag(not is_bit_set(self.bc.hi, 1))
+            case 0x49: self._update_zero_flag(not is_bit_set(self.bc.lo, 1))
+            case 0x4A: self._update_zero_flag(not is_bit_set(self.de.hi, 1))
+            case 0x4B: self._update_zero_flag(not is_bit_set(self.de.lo, 1))
+            case 0x4C: self._update_zero_flag(not is_bit_set(self.hl.hi, 1))
+            case 0x4D: self._update_zero_flag(not is_bit_set(self.hl.lo, 1))
+            case 0x4E: self._update_zero_flag(not is_bit_set(self._read_memory(self.hl.value), 1))
+            case 0x4F: self._update_zero_flag(not is_bit_set(self.af.hi, 1))
+            case 0x50: self._update_zero_flag(not is_bit_set(self.bc.hi, 2))
+            case 0x51: self._update_zero_flag(not is_bit_set(self.bc.lo, 2))
+            case 0x52: self._update_zero_flag(not is_bit_set(self.de.hi, 2))
+            case 0x53: self._update_zero_flag(not is_bit_set(self.de.lo, 2))
+            case 0x54: self._update_zero_flag(not is_bit_set(self.hl.hi, 2))
+            case 0x55: self._update_zero_flag(not is_bit_set(self.hl.lo, 2))
+            case 0x56: self._update_zero_flag(not is_bit_set(self._read_memory(self.hl.value), 2))
+            case 0x57: self._update_zero_flag(not is_bit_set(self.af.hi, 2))
+            case 0x58: self._update_zero_flag(not is_bit_set(self.bc.hi, 3))
+            case 0x59: self._update_zero_flag(not is_bit_set(self.bc.lo, 3))
+            case 0x5A: self._update_zero_flag(not is_bit_set(self.de.hi, 3))
+            case 0x5B: self._update_zero_flag(not is_bit_set(self.de.lo, 3))
+            case 0x5C: self._update_zero_flag(not is_bit_set(self.hl.hi, 3))
+            case 0x5D: self._update_zero_flag(not is_bit_set(self.hl.lo, 3))
+            case 0x5E: self._update_zero_flag(not is_bit_set(self._read_memory(self.hl.value), 3))
+            case 0x5F: self._update_zero_flag(not is_bit_set(self.af.hi, 3))
+            case 0x60: self._update_zero_flag(not is_bit_set(self.bc.hi, 4))
+            case 0x61: self._update_zero_flag(not is_bit_set(self.bc.lo, 4))
+            case 0x62: self._update_zero_flag(not is_bit_set(self.de.hi, 4))
+            case 0x63: self._update_zero_flag(not is_bit_set(self.de.lo, 4))
+            case 0x64: self._update_zero_flag(not is_bit_set(self.hl.hi, 4))
+            case 0x65: self._update_zero_flag(not is_bit_set(self.hl.lo, 4))
+            case 0x66: self._update_zero_flag(not is_bit_set(self._read_memory(self.hl.value), 4))
+            case 0x67: self._update_zero_flag(not is_bit_set(self.af.hi, 4))
+            case 0x68: self._update_zero_flag(not is_bit_set(self.bc.hi, 5))
+            case 0x69: self._update_zero_flag(not is_bit_set(self.bc.lo, 5))
+            case 0x6A: self._update_zero_flag(not is_bit_set(self.de.hi, 5))
+            case 0x6B: self._update_zero_flag(not is_bit_set(self.de.lo, 5))
+            case 0x6C: self._update_zero_flag(not is_bit_set(self.hl.hi, 5))
+            case 0x6D: self._update_zero_flag(not is_bit_set(self.hl.lo, 5))
+            case 0x6E: self._update_zero_flag(not is_bit_set(self._read_memory(self.hl.value), 5))
+            case 0x6F: self._update_zero_flag(not is_bit_set(self.af.hi, 5))
+            case 0x70: self._update_zero_flag(not is_bit_set(self.bc.hi, 6))
+            case 0x71: self._update_zero_flag(not is_bit_set(self.bc.lo, 6))
+            case 0x72: self._update_zero_flag(not is_bit_set(self.de.hi, 6))
+            case 0x73: self._update_zero_flag(not is_bit_set(self.de.lo, 6))
+            case 0x74: self._update_zero_flag(not is_bit_set(self.hl.hi, 6))
+            case 0x75: self._update_zero_flag(not is_bit_set(self.hl.lo, 6))
+            case 0x76: self._update_zero_flag(not is_bit_set(self._read_memory(self.hl.value), 6))
+            case 0x77: self._update_zero_flag(not is_bit_set(self.af.hi, 6))
+            case 0x78: self._update_zero_flag(not is_bit_set(self.bc.hi, 7))
+            case 0x79: self._update_zero_flag(not is_bit_set(self.bc.lo, 7))
+            case 0x7A: self._update_zero_flag(not is_bit_set(self.de.hi, 7))
+            case 0x7B: self._update_zero_flag(not is_bit_set(self.de.lo, 7))
+            case 0x7C: self._update_zero_flag(not is_bit_set(self.hl.hi, 7))
+            case 0x7D: self._update_zero_flag(not is_bit_set(self.hl.lo, 7))
+            case 0x7E: self._update_zero_flag(not is_bit_set(self._read_memory(self.hl.value), 7))
+            case 0x7F: self._update_zero_flag(not is_bit_set(self.af.hi, 7))
+            case _: raise Exception(f"Unknown prefix operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
+        self._update_half_carry_flag(True)
+        self._update_sub_flag(False)
 
         return opcode.cycles
 
@@ -477,9 +599,30 @@ class Cpu:
             self._update_half_carry_flag((val_1 & 0xF) - (val_2 & 0xF) < 0)
 
         match opcode.code:
+            case 0xB8: do_cp(self.af.hi, self.bc.hi)
+            case 0xB9: do_cp(self.af.hi, self.bc.lo)
+            case 0xBA: do_cp(self.af.hi, self.de.hi)
+            case 0xBB: do_cp(self.af.hi, self.de.lo)
+            case 0xBC: do_cp(self.af.hi, self.hl.hi)
+            case 0xBD: do_cp(self.af.hi, self.hl.lo)
+            case 0xBE: do_cp(self.af.hi, self._read_memory(self.hl.value))
             case 0xBF: do_cp(self.af.hi, self.af.hi)
             case 0xFE: do_cp(self.af.hi, self._get_next_byte())
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
+        return opcode.cycles
+
+    def _do_complement(self, opcode: OpCode) -> int:
+        '''
+        Complement all bits of the A register
+
+        :return the number of cycles needed to execute this operation
+        '''
+
+        self.af.hi = bit_negate(self.af.hi)
+
+        self._update_half_carry_flag(False)
+        self._update_sub_flag(False)
 
         return opcode.cycles
 
@@ -510,6 +653,9 @@ class Cpu:
             case 0x0D:
                 self.bc.decrement_lo()
                 val = self.bc.lo
+            case 0x15:
+                self.de.decrement_hi()
+                val = self.de.hi
             case 0x1D:
                 self.de.decrement_lo()
                 val = self.de.lo
@@ -521,9 +667,9 @@ class Cpu:
                 val = self.hl.lo
             case 0x35:
                 val = self._read_memory(self.hl.value)
-                val += 1
-                if val > 255:
-                    val = 0
+                val -= 1
+                if val < 0:
+                    val = 255
                 self._write_memory(self.hl.value, val)
             case 0x3D:
                 self.af.decrement_hi()
@@ -546,6 +692,8 @@ class Cpu:
 
         match opcode.code:
             case 0x0B: self.bc.decrement()
+            case 0x1B: self.de.decrement()
+            case 0x2B: self.hl.decrement()
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return opcode.cycles
@@ -596,6 +744,12 @@ class Cpu:
             case 0x2C:
                 self.hl.increment_lo()
                 val = self.hl.lo
+            case 0x34:
+                val = self._read_memory(self.hl.value)
+                val += 1
+                if val > 255:
+                    val = 0
+                self._write_memory(self.hl.value, val)
             case 0x3C:
                 self.af.increment_hi()
                 val = self.af.hi
@@ -670,6 +824,10 @@ class Cpu:
                 self.program_counter = self._get_next_byte_signed() + self.program_counter \
                     if not self._is_carry_flag_set() else self.program_counter + 1
                 cycles = opcode.alt_cycles if self._is_carry_flag_set() else cycles
+            case 0x38:
+                self.program_counter = self._get_next_byte_signed() + self.program_counter \
+                    if self._is_carry_flag_set() else self.program_counter + 1
+                cycles = opcode.alt_cycles if not self._is_carry_flag_set() else cycles
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return cycles
@@ -683,8 +841,10 @@ class Cpu:
 
         match opcode.code:
             case 0x01: self.bc.value = self._get_next_word()
+            case 0x02: self._write_memory(self.bc.value, self.af.hi)
             case 0x06: self.bc.hi = self._get_next_byte()
             case 0x08: self._write_memory(self._get_next_word(), self.stack_pointer)
+            case 0x0A: self.af.hi = self._read_memory(self.bc.value)
             case 0x0E: self.bc.lo = self._get_next_byte()
             case 0x11: self.de.value = self._get_next_word()
             case 0x12: self._write_memory(self.de.value, self.af.hi)
@@ -705,27 +865,63 @@ class Cpu:
                 self._write_memory(self.hl.value, self.af.hi)
                 self.hl.decrement()
             case 0x36: self._write_memory(self.hl.value, self._get_next_byte())
+            case 0x3A:
+                self.af.hi = self._read_memory(self.hl.value)
+                self.hl.decrement()
+            case 0x40: self.bc.hi = self.bc.hi
+            case 0x41: self.bc.hi = self.bc.lo
+            case 0x42: self.bc.hi = self.de.hi
+            case 0x43: self.bc.hi = self.de.lo
             case 0x44: self.bc.hi = self.hl.hi
+            case 0x45: self.bc.hi = self.hl.lo
             case 0x46: self.bc.hi = self._read_memory(self.hl.value)
             case 0x47: self.bc.hi = self.af.hi
+            case 0x48: self.bc.lo = self.bc.hi
+            case 0x49: self.bc.lo = self.bc.lo
+            case 0x4A: self.bc.lo = self.de.hi
+            case 0x4B: self.bc.lo = self.de.lo
+            case 0x4C: self.bc.lo = self.hl.hi
+            case 0x4D: self.bc.lo = self.hl.lo
             case 0x4E: self.bc.lo = self._read_memory(self.hl.value)
             case 0x4F: self.bc.lo = self.af.hi
+            case 0x50: self.de.hi = self.bc.hi
+            case 0x51: self.de.hi = self.bc.lo
+            case 0x52: self.de.hi = self.de.hi
+            case 0x53: self.de.hi = self.de.lo
+            case 0x54: self.de.hi = self.hl.hi
+            case 0x55: self.de.hi = self.hl.lo
             case 0x56: self.de.hi = self._read_memory(self.hl.value)
             case 0x57: self.de.hi = self.af.hi
+            case 0x58: self.de.lo = self.bc.hi
+            case 0x59: self.de.lo = self.bc.lo
+            case 0x5A: self.de.lo = self.de.hi
+            case 0x5B: self.de.lo = self.de.lo
+            case 0x5C: self.de.lo = self.hl.hi
             case 0x5D: self.de.lo = self.hl.lo
             case 0x5E: self.de.lo = self._read_memory(self.hl.value)
             case 0x5F: self.de.lo = self.af.hi
             case 0x60: self.hl.hi = self.bc.hi
+            case 0x61: self.hl.hi = self.bc.lo
             case 0x62: self.hl.hi = self.de.hi
+            case 0x63: self.hl.hi = self.de.lo
+            case 0x64: self.hl.hi = self.hl.hi
+            case 0x65: self.hl.hi = self.hl.lo
             case 0x66: self.hl.hi = self._read_memory(self.hl.value)
             case 0x67: self.hl.hi = self.af.hi
-            case 0x6B: self.hl.lo = self.de.hi
+            case 0x68: self.hl.lo = self.bc.hi
+            case 0x69: self.hl.lo = self.bc.lo
+            case 0x6A: self.hl.lo = self.de.hi
+            case 0x6B: self.hl.lo = self.de.lo
+            case 0x6C: self.hl.lo = self.hl.hi
+            case 0x6D: self.hl.lo = self.hl.lo
             case 0x6E: self.hl.lo = self._read_memory(self.hl.value)
             case 0x6F: self.hl.lo = self.af.hi
             case 0x70: self._write_memory(self.hl.value, self.bc.hi)
             case 0x71: self._write_memory(self.hl.value, self.bc.lo)
             case 0x72: self._write_memory(self.hl.value, self.de.hi)
             case 0x73: self._write_memory(self.hl.value, self.de.lo)
+            case 0x74: self._write_memory(self.hl.value, self.hl.hi)
+            case 0x75: self._write_memory(self.hl.value, self.hl.lo)
             case 0x77: self._write_memory(self.hl.value, self.af.hi)
             case 0x78: self.af.hi = self.bc.hi
             case 0x79: self.af.hi = self.bc.lo
@@ -773,11 +969,23 @@ class Cpu:
         '''
 
         match opcode.code:
-            case 0xb0:
+            case 0xB0:
                 self.af.hi |= self.bc.hi
                 val = self.af.hi
-            case 0xb1:
+            case 0xB1:
                 self.af.hi |= self.bc.lo
+                val = self.af.hi
+            case 0xB2:
+                self.af.hi |= self.de.hi
+                val = self.af.hi
+            case 0xB3:
+                self.af.hi |= self.de.lo
+                val = self.af.hi
+            case 0xB4:
+                self.af.hi |= self.hl.hi
+                val = self.af.hi
+            case 0xB5:
+                self.af.hi |= self.hl.lo
                 val = self.af.hi
             case 0xB6:
                 self.af.hi |= self._read_memory(self.hl.value)
@@ -828,8 +1036,17 @@ class Cpu:
         self.program_counter += 1
 
         match opcode.operation:
+            case Operation.BIT: return self._do_bit(opcode)
+            case Operation.RES: return self._do_res(opcode)
+            case Operation.RL: return self._do_rl(opcode, through_carry=True)
+            case Operation.RLC: return self._do_rl(opcode, through_carry=False)
             case Operation.RR: return self._do_rr(opcode, through_carry=True)
-            case Operation.SRL: return self._do_srl(opcode)
+            case Operation.RRC: return self._do_rr(opcode, through_carry=False)
+            case Operation.SET: return self._do_set(opcode)
+            case Operation.SLA: return self._do_shift_left(opcode)
+            case Operation.SRA: return self._do_shift_right(opcode, maintain_msb=True)
+            case Operation.SRL: return self._do_shift_right(opcode)
+            case Operation.SWAP: return self._do_swap(opcode)
             case _: raise Exception(f"Unknown prefix operation encountered 0x{format(op, '02x')} - {opcode.mnemonic}")
 
     def _do_push(self, opcode: OpCode) -> int:
@@ -875,6 +1092,83 @@ class Cpu:
 
         return cycles
 
+    def _do_res(self, opcode: OpCode) -> int:
+        '''
+        Reset bit n in given register
+
+        :return the number of cycles needed to execute this operation
+        '''
+
+        match opcode.code:
+            case 0x80: self.bc.hi = reset_bit(self.bc.hi, 0)
+            case 0x81: self.bc.lo = reset_bit(self.bc.lo, 0)
+            case 0x82: self.de.hi = reset_bit(self.de.hi, 0)
+            case 0x83: self.de.hi = reset_bit(self.de.lo, 0)
+            case 0x84: self.hl.hi = reset_bit(self.hl.hi, 0)
+            case 0x85: self.hl.hi = reset_bit(self.hl.lo, 0)
+            case 0x86: self._write_memory(self.hl.value, reset_bit(self._read_memory(self.hl.value), 0))
+            case 0x87: self.af.hi = reset_bit(self.af.hi, 0)
+            case 0x88: self.bc.hi = reset_bit(self.bc.hi, 1)
+            case 0x89: self.bc.hi = reset_bit(self.bc.lo, 1)
+            case 0x8A: self.de.hi = reset_bit(self.de.hi, 1)
+            case 0x8B: self.de.hi = reset_bit(self.de.lo, 1)
+            case 0x8C: self.hl.hi = reset_bit(self.hl.hi, 1)
+            case 0x8D: self.hl.hi = reset_bit(self.hl.lo, 1)
+            case 0x8E: self._write_memory(self.hl.value, reset_bit(self._read_memory(self.hl.value), 1))
+            case 0x8F: self.af.hi = reset_bit(self.af.hi, 1)
+            case 0x90: self.bc.hi = reset_bit(self.bc.hi, 2)
+            case 0x91: self.bc.hi = reset_bit(self.bc.lo, 2)
+            case 0x92: self.de.hi = reset_bit(self.de.hi, 2)
+            case 0x93: self.de.hi = reset_bit(self.de.lo, 2)
+            case 0x94: self.hl.hi = reset_bit(self.hl.hi, 2)
+            case 0x95: self.hl.hi = reset_bit(self.hl.lo, 2)
+            case 0x96: self._write_memory(self.hl.value, reset_bit(self._read_memory(self.hl.value), 2))
+            case 0x97: self.af.hi = reset_bit(self.af.hi, 2)
+            case 0x98: self.bc.hi = reset_bit(self.bc.hi, 3)
+            case 0x99: self.bc.hi = reset_bit(self.bc.lo, 3)
+            case 0x9A: self.de.hi = reset_bit(self.de.hi, 3)
+            case 0x9B: self.de.hi = reset_bit(self.de.lo, 3)
+            case 0x9C: self.hl.hi = reset_bit(self.hl.hi, 3)
+            case 0x9D: self.hl.hi = reset_bit(self.hl.lo, 3)
+            case 0x9E: self._write_memory(self.hl.value, reset_bit(self._read_memory(self.hl.value), 3))
+            case 0x9F: self.af.hi = reset_bit(self.af.hi, 3)
+            case 0xA0: self.bc.hi = reset_bit(self.bc.hi, 4)
+            case 0xA1: self.bc.hi = reset_bit(self.bc.lo, 4)
+            case 0xA2: self.de.hi = reset_bit(self.de.hi, 4)
+            case 0xA3: self.de.hi = reset_bit(self.de.lo, 4)
+            case 0xA4: self.hl.hi = reset_bit(self.hl.hi, 4)
+            case 0xA5: self.hl.hi = reset_bit(self.hl.lo, 4)
+            case 0xA6: self._write_memory(self.hl.value, reset_bit(self._read_memory(self.hl.value), 4))
+            case 0xA7: self.af.hi = reset_bit(self.af.hi, 4)
+            case 0xA8: self.bc.hi = reset_bit(self.bc.hi, 5)
+            case 0xA9: self.bc.hi = reset_bit(self.bc.lo, 5)
+            case 0xAA: self.de.hi = reset_bit(self.de.hi, 5)
+            case 0xAB: self.de.hi = reset_bit(self.de.lo, 5)
+            case 0xAC: self.hl.hi = reset_bit(self.hl.hi, 5)
+            case 0xAD: self.hl.hi = reset_bit(self.hl.lo, 5)
+            case 0xAE: self._write_memory(self.hl.value, reset_bit(self._read_memory(self.hl.value), 5))
+            case 0xAF: self.af.hi = reset_bit(self.af.hi, 5)
+            case 0xB0: self.bc.hi = reset_bit(self.bc.hi, 6)
+            case 0xB1: self.bc.hi = reset_bit(self.bc.lo, 6)
+            case 0xB2: self.de.hi = reset_bit(self.de.hi, 6)
+            case 0xB3: self.de.hi = reset_bit(self.de.lo, 6)
+            case 0xB4: self.hl.hi = reset_bit(self.hl.hi, 6)
+            case 0xB5: self.hl.hi = reset_bit(self.hl.lo, 6)
+            case 0xB6: self._write_memory(self.hl.value, reset_bit(self._read_memory(self.hl.value), 6))
+            case 0xB7: self.af.hi = reset_bit(self.af.hi, 6)
+            case 0xB8: self.bc.hi = reset_bit(self.bc.hi, 7)
+            case 0xB9: self.bc.hi = reset_bit(self.bc.lo, 7)
+            case 0xBA: self.de.hi = reset_bit(self.de.hi, 7)
+            case 0xBB: self.de.hi = reset_bit(self.de.lo, 7)
+            case 0xBC: self.hl.hi = reset_bit(self.hl.hi, 7)
+            case 0xBD: self.hl.hi = reset_bit(self.hl.lo, 7)
+            case 0xBE: self._write_memory(self.hl.value, reset_bit(self._read_memory(self.hl.value), 7))
+            case 0xBF: self.af.hi = reset_bit(self.af.hi, 7)
+            case _: raise Exception(f"Unknown prefix operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
+        return opcode.cycles
+
+
     def _do_restart(self, opcode: OpCode) -> int:
         '''
         Push current program counter to stack and then restart from predefined address (0x0000 + n)
@@ -889,6 +1183,78 @@ class Cpu:
 
         return opcode.cycles
 
+    def _do_rl(self, opcode: OpCode, through_carry=False) -> int:
+        '''
+        Rotate value right
+
+        :return the number of cycles needed to execute this operation
+        '''
+
+        def do_rl(val):
+            most_significant_bit = get_bit_val(val, 7)
+            carry_bit = 1 if self._is_carry_flag_set() else 0
+            res = (val << 1) | (carry_bit  if through_carry else most_significant_bit)
+
+            self._update_zero_flag(res == 0)
+            self._update_carry_flag(most_significant_bit == 1)
+            self._update_half_carry_flag(False)
+            self._update_sub_flag(False)
+
+            return res
+
+        match opcode.code:
+            case 0x00: self.bc.hi = do_rl(self.bc.hi)
+            case 0x01: self.bc.lo = do_rl(self.bc.lo)
+            case 0x02: self.de.hi = do_rl(self.de.hi)
+            case 0x03: self.de.lo = do_rl(self.de.lo)
+            case 0x04: self.hl.hi = do_rl(self.hl.hi)
+            case 0x05: self.hl.lo = do_rl(self.hl.lo)
+            case 0x06: self._write_memory(self.hl.value, do_rl(self._read_memory(self.hl.value)))
+            case 0x07: self.af.hi = do_rl(self.af.hi)
+            case 0x10: self.bc.hi = do_rl(self.bc.hi)
+            case 0x11: self.bc.lo = do_rl(self.bc.lo)
+            case 0x12: self.de.hi = do_rl(self.de.hi)
+            case 0x13: self.de.lo = do_rl(self.de.lo)
+            case 0x14: self.hl.hi = do_rl(self.hl.hi)
+            case 0x15: self.hl.lo = do_rl(self.hl.lo)
+            case 0x16: self._write_memory(self.hl.value, do_rl(self._read_memory(self.hl.value)))
+            case _: raise Exception(f"Unknown prefix operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
+        return opcode.cycles
+
+    def _do_rlca(self, opcode: OpCode) -> int:
+        '''
+        Rotate A register left setting carry to bit 7, ensuring zero flag is set to 0
+        '''
+
+        most_significant_bit = get_bit_val(self.af.hi, 7)
+        res =  (self.af.hi << 1) | most_significant_bit
+
+        self._update_zero_flag(False)
+        self._update_carry_flag(most_significant_bit == 1)
+        self._update_half_carry_flag(False)
+        self._update_sub_flag(False)
+
+        self.af.hi = res
+        return opcode.cycles
+
+    def _do_rla(self, opcode: OpCode) -> int:
+        '''
+        Rotate A register left through the carry flag, ensuring zero flag is set to 0
+        '''
+
+        most_significant_bit = get_bit_val(self.af.hi, 7)
+        carry_bit = 1 if self._is_carry_flag_set() else 0
+        res =  (self.af.hi << 1) | carry_bit
+
+        self._update_zero_flag(False)
+        self._update_carry_flag(most_significant_bit == 1)
+        self._update_half_carry_flag(False)
+        self._update_sub_flag(False)
+
+        self.af.hi = res
+        return opcode.cycles
+
     def _do_rra(self, opcode: OpCode) -> int:
         '''
         Rotate A register right through the carry flag, ensuring zero flag is set to 0
@@ -897,6 +1263,22 @@ class Cpu:
         least_significant_bit = get_bit_val(self.af.hi, 0)
         carry_bit = 1 if self._is_carry_flag_set() else 0
         res = (carry_bit << 7) | (self.af.hi >> 1)
+
+        self._update_zero_flag(False)
+        self._update_carry_flag(least_significant_bit == 1)
+        self._update_half_carry_flag(False)
+        self._update_sub_flag(False)
+
+        self.af.hi = res
+        return opcode.cycles
+
+    def _do_rrca(self, opcode: OpCode) -> int:
+        '''
+        Rotate A register rigjt setting carry to bit 0, ensuring zero flag is set to 0
+        '''
+
+        least_significant_bit = get_bit_val(self.af.hi, 0)
+        res =  (least_significant_bit << 7) | (self.af.hi >> 1)
 
         self._update_zero_flag(False)
         self._update_carry_flag(least_significant_bit == 1)
@@ -926,23 +1308,159 @@ class Cpu:
             return res
 
         match opcode.code:
+            case 0x08: self.bc.hi = do_rr(self.bc.hi)
+            case 0x09: self.bc.lo = do_rr(self.bc.lo)
+            case 0x0A: self.de.hi = do_rr(self.de.hi)
+            case 0x0B: self.de.lo = do_rr(self.de.lo)
+            case 0x0C: self.hl.hi = do_rr(self.hl.hi)
+            case 0x0D: self.hl.lo = do_rr(self.hl.lo)
+            case 0x0E: self._write_memory(self.hl.value, do_rr(self._read_memory(self.hl.value)))
+            case 0x0F: self.af.hi = do_rr(self.af.hi)
+            case 0x18: self.bc.hi = do_rr(self.bc.hi)
             case 0x19: self.bc.lo = do_rr(self.bc.lo)
             case 0x1A: self.de.hi = do_rr(self.de.hi)
             case 0x1B: self.de.lo = do_rr(self.de.lo)
+            case 0x1C: self.hl.hi = do_rr(self.hl.hi)
+            case 0x1D: self.hl.lo = do_rr(self.hl.lo)
+            case 0x1E: self._write_memory(self.hl.value, do_rr(self._read_memory(self.hl.value)))
+            case 0x1F: self.af.hi = do_rr(self.af.hi)
             case _: raise Exception(f"Unknown prefix operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return opcode.cycles
 
-    def _do_srl(self, opcode: OpCode) -> int:
+    def _do_set(self, opcode: OpCode) -> int:
+        '''
+        Set bit n in given register
+
+        :return the number of cycles needed to execute this operation
+        '''
+
+        match opcode.code:
+            case 0xC0: self.bc.hi = set_bit(self.bc.hi, 0)
+            case 0xC1: self.bc.lo = set_bit(self.bc.lo, 0)
+            case 0xC2: self.de.hi = set_bit(self.de.hi, 0)
+            case 0xC3: self.de.hi = set_bit(self.de.lo, 0)
+            case 0xC4: self.hl.hi = set_bit(self.hl.hi, 0)
+            case 0xC5: self.hl.hi = set_bit(self.hl.lo, 0)
+            case 0xC6: self._write_memory(self.hl.value, set_bit(self._read_memory(self.hl.value), 0))
+            case 0xC7: self.af.hi = set_bit(self.af.hi, 0)
+            case 0xC8: self.bc.hi = set_bit(self.bc.hi, 1)
+            case 0xC9: self.bc.hi = set_bit(self.bc.lo, 1)
+            case 0xCA: self.de.hi = set_bit(self.de.hi, 1)
+            case 0xCB: self.de.hi = set_bit(self.de.lo, 1)
+            case 0xCC: self.hl.hi = set_bit(self.hl.hi, 1)
+            case 0xCD: self.hl.hi = set_bit(self.hl.lo, 1)
+            case 0xCE: self._write_memory(self.hl.value, set_bit(self._read_memory(self.hl.value), 1))
+            case 0xCF: self.af.hi = set_bit(self.af.hi, 1)
+            case 0xD0: self.bc.hi = set_bit(self.bc.hi, 2)
+            case 0xD1: self.bc.hi = set_bit(self.bc.lo, 2)
+            case 0xD2: self.de.hi = set_bit(self.de.hi, 2)
+            case 0xD3: self.de.hi = set_bit(self.de.lo, 2)
+            case 0xD4: self.hl.hi = set_bit(self.hl.hi, 2)
+            case 0xD5: self.hl.hi = set_bit(self.hl.lo, 2)
+            case 0xD6: self._write_memory(self.hl.value, set_bit(self._read_memory(self.hl.value), 2))
+            case 0xD7: self.af.hi = set_bit(self.af.hi, 2)
+            case 0xD8: self.bc.hi = set_bit(self.bc.hi, 3)
+            case 0xD9: self.bc.hi = set_bit(self.bc.lo, 3)
+            case 0xDA: self.de.hi = set_bit(self.de.hi, 3)
+            case 0xDB: self.de.hi = set_bit(self.de.lo, 3)
+            case 0xDC: self.hl.hi = set_bit(self.hl.hi, 3)
+            case 0xDD: self.hl.hi = set_bit(self.hl.lo, 3)
+            case 0xDE: self._write_memory(self.hl.value, set_bit(self._read_memory(self.hl.value), 3))
+            case 0xDF: self.af.hi = set_bit(self.af.hi, 3)
+            case 0xE0: self.bc.hi = set_bit(self.bc.hi, 4)
+            case 0xE1: self.bc.hi = set_bit(self.bc.lo, 4)
+            case 0xE2: self.de.hi = set_bit(self.de.hi, 4)
+            case 0xE3: self.de.hi = set_bit(self.de.lo, 4)
+            case 0xE4: self.hl.hi = set_bit(self.hl.hi, 4)
+            case 0xE5: self.hl.hi = set_bit(self.hl.lo, 4)
+            case 0xE6: self._write_memory(self.hl.value, set_bit(self._read_memory(self.hl.value), 4))
+            case 0xE7: self.af.hi = set_bit(self.af.hi, 4)
+            case 0xE8: self.bc.hi = set_bit(self.bc.hi, 5)
+            case 0xE9: self.bc.hi = set_bit(self.bc.lo, 5)
+            case 0xEA: self.de.hi = set_bit(self.de.hi, 5)
+            case 0xEB: self.de.hi = set_bit(self.de.lo, 5)
+            case 0xEC: self.hl.hi = set_bit(self.hl.hi, 5)
+            case 0xED: self.hl.hi = set_bit(self.hl.lo, 5)
+            case 0xEE: self._write_memory(self.hl.value, set_bit(self._read_memory(self.hl.value), 5))
+            case 0xEF: self.af.hi = set_bit(self.af.hi, 5)
+            case 0xF0: self.bc.hi = set_bit(self.bc.hi, 6)
+            case 0xF1: self.bc.hi = set_bit(self.bc.lo, 6)
+            case 0xF2: self.de.hi = set_bit(self.de.hi, 6)
+            case 0xF3: self.de.hi = set_bit(self.de.lo, 6)
+            case 0xF4: self.hl.hi = set_bit(self.hl.hi, 6)
+            case 0xF5: self.hl.hi = set_bit(self.hl.lo, 6)
+            case 0xF6: self._write_memory(self.hl.value, set_bit(self._read_memory(self.hl.value), 6))
+            case 0xF7: self.af.hi = set_bit(self.af.hi, 6)
+            case 0xF8: self.bc.hi = set_bit(self.bc.hi, 7)
+            case 0xF9: self.bc.hi = set_bit(self.bc.lo, 7)
+            case 0xFA: self.de.hi = set_bit(self.de.hi, 7)
+            case 0xFB: self.de.hi = set_bit(self.de.lo, 7)
+            case 0xFC: self.hl.hi = set_bit(self.hl.hi, 7)
+            case 0xFD: self.hl.hi = set_bit(self.hl.lo, 7)
+            case 0xFE: self._write_memory(self.hl.value, set_bit(self._read_memory(self.hl.value), 7))
+            case 0xFF: self.af.hi = set_bit(self.af.hi, 7)
+            case _: raise Exception(f"Unknown prefix operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
+        return opcode.cycles
+
+    def _do_set_carry_flag(self, opcode: OpCode) -> int:
+        '''
+        Set the carry flag
+
+        :return the number of cycles needed to execute this operation
+        '''
+
+        self._update_half_carry_flag(False)
+        self._update_sub_flag(False)
+        self._update_carry_flag(True)
+
+        return opcode.cycles
+
+    def _do_shift_left(self, opcode: OpCode) -> int:
+        '''
+        Shift register bits left into carry flag, least significant bit should be 0
+
+        :Return the number of cycles needed to execute this operation
+        '''
+
+        def do_shift_left(val):
+            most_significant_bit = get_bit_val(val, 7)
+            res = val << 1
+
+            self._update_zero_flag(res == 0)
+            self._update_carry_flag(most_significant_bit == 1)
+            self._update_half_carry_flag(False)
+            self._update_sub_flag(False)
+
+            return res
+
+        match opcode.code:
+            case 0x20: self.bc.hi = do_shift_left(self.bc.hi)
+            case 0x21: self.bc.lo = do_shift_left(self.bc.lo)
+            case 0x22: self.de.hi = do_shift_left(self.de.hi)
+            case 0x23: self.de.lo = do_shift_left(self.de.lo)
+            case 0x24: self.hl.hi = do_shift_left(self.hl.hi)
+            case 0x25: self.hl.lo = do_shift_left(self.hl.lo)
+            case 0x26: self._write_memory(self.hl.value, do_shift_left(self._read_memory(self.hl.value)))
+            case 0x27: self.af.hi = do_shift_left(self.af.hi)
+            case _: raise Exception(f"Unknown prefix operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
+        return opcode.cycles
+
+    def _do_shift_right(self, opcode: OpCode, maintain_msb=False) -> int:
         '''
         Shift register bits right into carry flag, Most significant bit should be 0
 
         :return the number of cycles needed to execute this operation
         '''
 
-        def do_srl(val):
+        def do_shift_right(val):
+            most_significant_bit = get_bit_val(val, 7)
             least_significant_bit = get_bit_val(val, 0)
             res = val >> 1
+            if maintain_msb:
+                res |= (most_significant_bit << 7)
 
             self._update_zero_flag(res == 0)
             self._update_carry_flag(least_significant_bit == 1)
@@ -952,7 +1470,22 @@ class Cpu:
             return res
 
         match opcode.code:
-            case 0x38: self.bc.hi = do_srl(self.bc.hi)
+            case 0x28: self.bc.hi = do_shift_right(self.bc.hi)
+            case 0x29: self.bc.lo = do_shift_right(self.bc.lo)
+            case 0x2A: self.de.hi = do_shift_right(self.de.hi)
+            case 0x2B: self.de.lo = do_shift_right(self.de.lo)
+            case 0x2C: self.hl.hi = do_shift_right(self.hl.hi)
+            case 0x2D: self.hl.lo = do_shift_right(self.hl.lo)
+            case 0x2E: self._write_memory(self.hl.value, do_shift_right(self._read_memory(self.hl.value)))
+            case 0x2F: self.af.hi = do_shift_right(self.af.hi)
+            case 0x38: self.bc.hi = do_shift_right(self.bc.hi)
+            case 0x39: self.bc.lo = do_shift_right(self.bc.lo)
+            case 0x3A: self.de.hi = do_shift_right(self.de.hi)
+            case 0x3B: self.de.lo = do_shift_right(self.de.lo)
+            case 0x3C: self.hl.hi = do_shift_right(self.hl.hi)
+            case 0x3D: self.hl.lo = do_shift_right(self.hl.lo)
+            case 0x3E: self._write_memory(self.hl.value, do_shift_right(self._read_memory(self.hl.value)))
+            case 0x3F: self.af.hi = do_shift_right(self.af.hi)
             case _: raise Exception(f"Unknown prefix operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return opcode.cycles
@@ -976,9 +1509,51 @@ class Cpu:
             return res if res >= 0 else 256 + res
 
         match opcode.code:
+            case 0x90: self.af.hi = do_sub(self.af.hi, self.bc.hi)
+            case 0x91: self.af.hi = do_sub(self.af.hi, self.bc.lo)
+            case 0x92: self.af.hi = do_sub(self.af.hi, self.de.hi)
+            case 0x93: self.af.hi = do_sub(self.af.hi, self.de.lo)
+            case 0x94: self.af.hi = do_sub(self.af.hi, self.hl.hi)
+            case 0x95: self.af.hi = do_sub(self.af.hi, self.hl.lo)
+            case 0x96: self.af.hi = do_sub(self.af.hi, self._read_memory(self.hl.value))
+            case 0x97: self.af.hi = do_sub(self.af.hi, self.af.hi)
+            case 0x98: self.af.hi = do_sub(self.af.hi, self.bc.hi)
+            case 0x99: self.af.hi = do_sub(self.af.hi, self.bc.lo)
+            case 0x9A: self.af.hi = do_sub(self.af.hi, self.de.hi)
+            case 0x9B: self.af.hi = do_sub(self.af.hi, self.de.lo)
+            case 0x9C: self.af.hi = do_sub(self.af.hi, self.hl.hi)
+            case 0x9D: self.af.hi = do_sub(self.af.hi, self.hl.lo)
+            case 0x9E: self.af.hi = do_sub(self.af.hi, self._read_memory(self.hl.value))
+            case 0x9F: self.af.hi = do_sub(self.af.hi, self.af.hi)
             case 0xD6: self.af.hi = do_sub(self.af.hi, self._get_next_byte())
             case 0xDE: self.af.hi = do_sub(self.af.hi, self._get_next_byte())
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
+        return opcode.cycles
+
+    def _do_swap(self, opcode: OpCode) -> int:
+        '''
+        Do swap operation, swapping upper and lower nibbles of value
+        '''
+
+        def do_swap(val):
+            res = (val & 0xF) | (val >> 4)
+            self._update_zero_flag(res == 0)
+            self._update_sub_flag(False)
+            self._update_carry_flag(False)
+            self._update_half_carry_flag(False)
+            return res
+
+        match opcode.code:
+            case 0x30: self.bc.hi = do_swap(self.bc.hi)
+            case 0x31: self.bc.lo = do_swap(self.bc.lo)
+            case 0x32: self.de.hi = do_swap(self.de.hi)
+            case 0x33: self.de.lo = do_swap(self.de.lo)
+            case 0x34: self.hl.hi = do_swap(self.hl.hi)
+            case 0x35: self.hl.lo = do_swap(self.hl.lo)
+            case 0x36: self._write_memory(self.hl.value, do_swap(self._read_memory(self.hl.value)))
+            case 0x37: self.af.hi = do_swap(self.af.hi)
+            case _: raise Exception(f"Unknown prefix operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return opcode.cycles
 
@@ -990,8 +1565,20 @@ class Cpu:
         '''
 
         match opcode.code:
+            case 0xA8:
+                self.af.hi ^= self.bc.hi
+                val = self.af.hi
             case 0xA9:
                 self.af.hi ^= self.bc.lo
+                val = self.af.hi
+            case 0xAA:
+                self.af.hi ^= self.de.hi
+                val = self.af.hi
+            case 0xAB:
+                self.af.hi ^= self.de.lo
+                val = self.af.hi
+            case 0xAC:
+                self.af.hi ^= self.hl.hi
                 val = self.af.hi
             case 0xAD:
                 self.af.hi ^= self.hl.lo
