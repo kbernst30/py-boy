@@ -1,6 +1,13 @@
-from constants import CURRENT_SCANLINE_ADDR, CYCLES_PER_SCANLINE, LCD_CONTROL_ADDR, LCD_STATUS_ADDR, MAX_SCANLINE_VALUE
+from constants import (
+    CURRENT_SCANLINE_ADDR,
+    CYCLES_PER_SCANLINE,
+    GB_COLORS,
+    LCD_CONTROL_ADDR,
+    LCD_STATUS_ADDR,
+    MAX_SCANLINE_VALUE
+)
 from mmu import Mmu
-from utils import is_bit_set
+from utils import get_bit_val, is_bit_set
 
 
 class LcdControl:
@@ -26,6 +33,9 @@ class LcdControl:
         '''
 
         return is_bit_set(self.memory.read_byte(LCD_CONTROL_ADDR), 7)
+
+    def get_background_tile_data_area(self):
+        return 0x8000 if is_bit_set(self.memory.read_byte(LCD_CONTROL_ADDR), 4) else 0x8800
 
 
 class LcdStatus:
@@ -113,13 +123,74 @@ class Ppu:
             # self.memory.reset_scanline()
             pass
 
-    def debug_vram(self, display):
-        # print(self.memory.read_byte(0x8800))
-        # for i in range(0x8000, 0x9800):
-        #     if self.debug:
-        #         if self.memory.read_byte(i) != 0:
-        #             self.debug = False
-        #             print(format(i, '04X'), format(self.memory.read_byte(i), '02X'))
-        if self.debug and self.memory.read_byte(0x8000) > 0:
-            self.debug = False
-            print(format(0x8000, '04X'), format(self.memory.read_byte(0x8000), '02X'))
+    def get_tiles(self):
+        '''
+        Get all the tiles in VRAM
+        '''
+
+        # Let's just start with BG tiles for now
+        # Get the address that background/window tiles are in from LCD control
+        start_addr = self.lcd_control.get_background_tile_data_area()
+        addr_space_len = 0x800
+
+        tiles = []
+        counter = 0
+
+        current_tile = []
+        for addr in range(start_addr, start_addr + addr_space_len, 2):
+            # each tile occupies 16 bytes, and each line in the sprite is 2 bytes long
+            # so that makes each tile 8x8 pixels
+            # We have 2 bytes per line to help determine the "color" of the pixel
+            # Each bit in the first byte of a line is the least significant bit of the color ID
+            # and the bit in the second byte is the most significant bit. Use the color ID against
+            # the pallette to get the appropriate color
+            byte_1 = self.memory.read_byte(addr)
+            byte_2 = self.memory.read_byte(addr + 1)
+
+            counter += 2
+
+            line = []
+
+            for i in range(0, 8):
+                least_significant_bit = get_bit_val(byte_1, i)
+                most_significant_bit = get_bit_val(byte_2, i)
+                color_id = (most_significant_bit << 1) | least_significant_bit
+                color = self._get_color(color_id)
+                line.append(color)
+
+            current_tile.append(line)
+            if counter == 16:
+                counter = 0
+                tiles.append(current_tile.copy())
+                current_tile = []
+
+        return tiles
+
+    def _get_color(self, color_id: int):
+        '''
+        Get the color based on ID and current color pallette
+        '''
+
+        pallette = self.memory.read_byte(0xFF47)  # this register is where the color pallette is
+
+        # The pallette bits define colors as such (using color ID from 0 - 1)
+        # Bit 7-6 - Color for index 3
+        # Bit 5-4 - Color for index 2
+        # Bit 3-2 - Color for index 1
+        # Bit 1-0 - Color for index 0
+        match color_id:
+            case 3: color = get_bit_val(pallette, 7) << 1 | get_bit_val(pallette, 6)
+            case 2: color = get_bit_val(pallette, 5) << 1 | get_bit_val(pallette, 4)
+            case 1: color = get_bit_val(pallette, 3) << 1 | get_bit_val(pallette, 2)
+            case 0: color = get_bit_val(pallette, 1) << 1 | get_bit_val(pallette, 0)
+            case _: raise Exception(f"Invalid color_id - {color_id}")
+
+        return GB_COLORS[color]
+
+    # def debug_vram(self):
+    #     # print(self.memory.read_byte(0x8800))
+    #     for i in range(0x8000, 0x9800):
+    #         print(format(i, '04X') + " - " + format(self.memory.read_byte(i), '02X'))
+    #     # if self.debug and self.memory.read_byte(0x8000) > 0:
+    #     #     self.debug = False
+    #     #     print(format(0x8000, '04X'), format(self.memory.read_byte(0x8000), '02X'))

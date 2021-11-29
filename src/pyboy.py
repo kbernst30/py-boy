@@ -24,11 +24,11 @@ class PyBoy:
     DISPLAY_SCALE = 5
 
     def __init__(self):
-        self.main_display = MainDisplay()
-
         self.mmu = Mmu()
         self.cpu = Cpu(self.mmu)
         self.ppu = Ppu(self.mmu)
+
+        self.main_display = MainDisplay(self.ppu)
 
         self.rom = None
 
@@ -61,7 +61,10 @@ class PyBoy:
                     frame_cycles += cycles
 
                     self.ppu.update_graphics(cycles)
-                    self.ppu.debug_vram(self.main_display)
+                    # self.ppu.debug_vram(self.main_display)
+
+                # After execution of a frame, update the screen
+                self.main_display.render_screen()
 
             except Exception as e:
                 logger.exception(e)

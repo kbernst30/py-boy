@@ -1,6 +1,14 @@
 from debug import get_memory_sequence
 
 
+# CARTRIDGE_TYPES = {
+#     0x00: 'ROM ONLY',
+#     0x01: 'MBC1',
+#     0x02: 'MBC1+RAM',
+#     0x03: 'MBC1+RAM+BATTERY'
+# }
+
+
 class Rom:
 
     def __init__(self, file):
@@ -28,6 +36,7 @@ class Rom:
         print(f'Entry Point:\n {get_memory_sequence(self.data[0x100:0x104])}')
         print(f'Nintendo Logo:\n {get_memory_sequence(self.data[0x104:0x134])}')
         print(f'Title:\n {title}')
+        print(f'Cartridge Type:\n {format(self.data[0x147], "02X")}')
         print("\n---------------------------------\n")
 
     def get_cartridge_type(self) -> int:

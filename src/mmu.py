@@ -1,6 +1,6 @@
 import logging
 
-from constants import CURRENT_SCANLINE_ADDR, DIVIDER_REGISTER_ADDR
+from constants import CURRENT_SCANLINE_ADDR, DIVIDER_REGISTER_ADDR, MAXIMUM_RAM_BANKS, RAM_BANK_SIZE
 
 
 logger = logging.getLogger(__name__)
@@ -28,6 +28,19 @@ class Mmu:
     def __init__(self):
 
         self.memory = [0 for _ in range(self.MEMORY_SIZE)]
+
+        # RAM banks to be used for external RAM
+        self.ram_banks = [0 for _ in range(MAXIMUM_RAM_BANKS * RAM_BANK_SIZE)]
+
+        # RAM access is disabled by default, and must explicitly be enabled
+        self.enable_ram = False
+
+        self.reset()
+
+    def reset(self):
+        '''
+        Reset state of MMU
+        '''
 
         # Initial MMU state
         self.memory[0xFF05] = 0x00
@@ -65,7 +78,7 @@ class Mmu:
         '''
         Read a byte from memory and return
 
-        TODO deal with addresses on case basis
+        TODO deal with addresses on case basis - basically need to deal with MBC modes
         '''
 
         return self.memory[addr]
@@ -80,7 +93,8 @@ class Mmu:
         if addr < 0x8000:
             # Restricted ROM access here... do not write
             # TODO Handle banking
-            pass
+            print("TRY HERE")
+            self._handle_banking(addr, data)
 
         elif addr >= 0xE000 and addr < 0xFE00:
             # If we are writing to ECHO (E000-FDFF) we must write to working RAM (C000-CFFF) as well
@@ -88,7 +102,8 @@ class Mmu:
 
         elif addr >= 0xFEA0 and addr < 0xFF00:
             # Restricted area - do NOT allow writing
-            logger.warn(f"Attempted write to restricted addr - 0x{format(addr, '0x')}")
+            pass
+            # logger.warn(f"Attempted write to restricted addr - 0x{format(addr, '0x')}")
 
         elif addr == DIVIDER_REGISTER_ADDR or addr == CURRENT_SCANLINE_ADDR:
             # We cannot write here directly - reset to 0
@@ -115,3 +130,18 @@ class Mmu:
         '''
 
         self.memory[CURRENT_SCANLINE_ADDR] = 0
+
+    def _handle_banking(self, addr: int, data: int):
+        '''
+        Writing to address 0x0000 - 0x7FFF does stuff to the internal MMU's state in terms
+        of dealing with ROM and RAM banking. Handle these cases here
+        '''
+
+        # If writing to address less than 0x2000, we are enabling or disabling RAM access
+        if addr < 0x2000:
+            if (data & 0xF) == 0xA:
+                # If the lower nibble of data being written is 0xA (for some reason) then we enable
+                # RAM, otherwise disable
+                self.enable_ram = True
+            else:
+                self.enable_ram = False

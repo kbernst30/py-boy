@@ -1,3 +1,4 @@
+from ppu import Ppu
 import sdl2
 
 from constants import SCREEN_HEIGHT, SCREEN_WIDTH
@@ -27,7 +28,9 @@ class MainDisplay:
 
     DISPLAY_FACTOR = 4
 
-    def __init__(self):
+    def __init__(self, ppu: Ppu):
+        self.ppu = ppu
+
         self.window = sdl2.ext.Window(
             "Py Boy",
             size=(
@@ -43,12 +46,18 @@ class MainDisplay:
 
         self.factory = sdl2.ext.SpriteFactory(sdl2.ext.SOFTWARE)
 
+        self.debug = True
+
     def show(self):
         self.window.show()
 
         # processor = sdl2.ext.TestEventProcessor()
         # processor.run(self.window)
         self.draw(10, 10)
+
+    def render_screen(self):
+        if self.debug:
+            tiles = self.ppu.get_tiles()
 
     def refresh(self):
         self.window.refresh()

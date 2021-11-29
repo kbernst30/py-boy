@@ -41,7 +41,7 @@ class RegisterPair:
     def decrement(self):
         self.value = self.value - 1
         if self.value < 0:
-            self.value = 255
+            self.value = 0xFFFF
 
     def increment_lo(self):
         self.lo += 1
@@ -136,10 +136,10 @@ class Cpu:
         op = self._read_memory(self.program_counter)
         opcode = opcodes_map[op]
 
-        if self.debug_ctr < 1258895:
+        # if self.debug_ctr < 1258895:
         # if self.debug_ctr < 16510:
-            self._debug()
-            self.debug_ctr += 1
+            # self._debug()
+            # self.debug_ctr += 1
         #     self.debug_set.add(f"{format(op, '02X')} - {opcode.mnemonic} - {opcode.cycles} - {opcode.alt_cycles}")
 
         #     if self.debug_ctr == 16510:
@@ -591,9 +591,7 @@ class Cpu:
         '''
 
         def do_cp(val_1: int, val_2: int):
-            res = val_1 - val_2
-
-            self._update_zero_flag(res & 0xFF == 0)
+            self._update_zero_flag(val_1 == val_2)
             self._update_sub_flag(True)
             self._update_carry_flag(val_1 < val_2)
             self._update_half_carry_flag((val_1 & 0xF) - (val_2 & 0xF) < 0)
@@ -694,6 +692,10 @@ class Cpu:
             case 0x0B: self.bc.decrement()
             case 0x1B: self.de.decrement()
             case 0x2B: self.hl.decrement()
+            case 0x3B:
+                self.stack_pointer -= 1
+                if self.stack_pointer < 0:
+                    self.stack_pointer = 0xFFFF
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return opcode.cycles
@@ -1218,6 +1220,7 @@ class Cpu:
             case 0x14: self.hl.hi = do_rl(self.hl.hi)
             case 0x15: self.hl.lo = do_rl(self.hl.lo)
             case 0x16: self._write_memory(self.hl.value, do_rl(self._read_memory(self.hl.value)))
+            case 0x17: self.af.hi = do_rl(self.af.hi)
             case _: raise Exception(f"Unknown prefix operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return opcode.cycles
@@ -1500,13 +1503,14 @@ class Cpu:
         def do_sub(val_1: int, val_2: int) -> int:
             carry = 1 if with_carry and self._is_carry_flag_set() else 0
             res = val_1 - val_2 - carry
+            res = res if res >= 0 else 256 + res
 
             self._update_zero_flag(res & 0xFF == 0)
             self._update_sub_flag(True)
             self._update_carry_flag(val_1 < val_2 + carry)
             self._update_half_carry_flag((val_1 & 0xF) < (val_2 & 0xF) + carry)
 
-            return res if res >= 0 else 256 + res
+            return res
 
         match opcode.code:
             case 0x90: self.af.hi = do_sub(self.af.hi, self.bc.hi)
