@@ -136,10 +136,10 @@ class Cpu:
         op = self._read_memory(self.program_counter)
         opcode = opcodes_map[op]
 
-        # if self.debug_ctr < 1258895:
+        if self.debug_ctr < 1258895:
         # if self.debug_ctr < 16510:
-        #     self._debug()
-        #     self.debug_ctr += 1
+            self._debug()
+            self.debug_ctr += 1
         #     self.debug_set.add(f"{format(op, '02X')} - {opcode.mnemonic} - {opcode.cycles} - {opcode.alt_cycles}")
 
         #     if self.debug_ctr == 16510:
@@ -1602,7 +1602,7 @@ class Cpu:
         return opcode.cycles
 
     # flake8: noqa: E741 E501
-    def _debug(self, opcode):
+    def _debug(self):
         # a = format(self.af.hi, '02X')
         # f = format(self.af.lo, '02X')
         # b = format(self.bc.hi, '02X')
@@ -1616,15 +1616,18 @@ class Cpu:
         de = format(self.de.value, '04X')
         hl = format(self.hl.value, '04X')
         sp = format(self.stack_pointer, '04X')
-        # pc = format(self.program_counter, '04X')
+        pc = format(self.program_counter, '04X')
 
-        # pc_1 = format(self._read_memory(self.program_counter), '02X')
-        # pc_2 = format(self._read_memory(self.program_counter + 1), '02X')
-        # pc_3 = format(self._read_memory(self.program_counter + 2), '02X')
-        # pc_4 = format(self._read_memory(self.program_counter + 3), '02X')
+        pc_1 = format(self._read_memory(self.program_counter), '02X')
+        pc_2 = format(self._read_memory(self.program_counter + 1), '02X')
+        pc_3 = format(self._read_memory(self.program_counter + 2), '02X')
+        pc_4 = format(self._read_memory(self.program_counter + 3), '02X')
 
         # with open("debug.txt", "a") as debug_file:
         #     debug_file.write(f'A: {a} F: {f} B: {b} C: {c} D: {d} E: {e} H: {h} L: {l} SP: {sp} PC: 00:{pc} ({pc_1} {pc_2} {pc_3} {pc_4})\n')
 
+        # with open("debug.txt", "a") as debug_file:
+        #     debug_file.write(f"AF: {af} BC: {bc} DE: {de} HL: {hl} {format(self.program_counter, '04X')} - {opcode.mnemonic}\n")
+
         with open("debug.txt", "a") as debug_file:
-            debug_file.write(f"AF: {af} BC: {bc} DE: {de} HL: {hl} {format(self.program_counter, '04X')} - {opcode.mnemonic}\n")
+            debug_file.write(f'SP: {sp} PC: 00:{pc} ({pc_1} {pc_2} {pc_3} {pc_4})\n')
