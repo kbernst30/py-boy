@@ -53,7 +53,8 @@ class MainDisplay:
 
         # processor = sdl2.ext.TestEventProcessor()
         # processor.run(self.window)
-        # self.draw(10, 10, 0x000000)
+        # for x in range(SCREEN_WIDTH):
+        #     self.draw(x, 10, 0x000000)
 
     def render_screen(self):
         if self.debug:
@@ -70,7 +71,7 @@ class MainDisplay:
 
                 for i in range(len(tile)):
                     line = tile[i]
-                    # print([1 if x > 0 else 0 for x in line])
+                    # print([0 if x == 0xFFFFFF else 1 for x in line])
                     for j in range(len(line)):
                         color = line[j]
                         self.draw(x + j, y + i, color)
@@ -89,8 +90,8 @@ class MainDisplay:
         color = sdl2.ext.Color(red, blue, green)
 
         x1 = x * self.DISPLAY_FACTOR
-        x2 = x1 + self.DISPLAY_FACTOR
-        y1 = self.DISPLAY_FACTOR
+        x2 = self.DISPLAY_FACTOR
+        y1 = y * self.DISPLAY_FACTOR
         y2 = self.DISPLAY_FACTOR
 
-        self.renderer.draw(color, (x1, x2, y1, y2))
+        self.renderer.draw(color, (x1, y2, x2, y2))
