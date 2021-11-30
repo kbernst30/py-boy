@@ -37,9 +37,16 @@ RAM_BANK_COUNT_ADDR = 0x148
 MAXIMUM_RAM_BANKS = 4
 RAM_BANK_SIZE = 0x2000  # In bytes
 
+# GB_COLORS = {
+#     0: 0xFFFFFF,
+#     1: 0xCCCCCC,
+#     2: 0x777777,
+#     3: 0x000000
+# }
+
 GB_COLORS = {
-    0: 0xFFFFFF,
-    1: 0xCCCCCC,
-    2: 0x777777,
-    3: 0x000000
+    3: 0xFFFFFF,
+    2: 0xCCCCCC,
+    1: 0x777777,
+    0: 0x000000
 }
