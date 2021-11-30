@@ -151,7 +151,8 @@ class Ppu:
 
             line = []
 
-            for i in range(0, 8):
+            # Loop through pixels left to right as that's the order in the tile (bit 7 - 0)
+            for i in range(7, -1, -1):
                 least_significant_bit = get_bit_val(byte_1, i)
                 most_significant_bit = get_bit_val(byte_2, i)
                 color_id = (most_significant_bit << 1) | least_significant_bit

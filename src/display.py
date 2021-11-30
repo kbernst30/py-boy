@@ -94,4 +94,4 @@ class MainDisplay:
         y1 = y * self.DISPLAY_FACTOR
         y2 = self.DISPLAY_FACTOR
 
-        self.renderer.draw(color, (x1, y2, x2, y2))
+        self.renderer.draw(color, (x1, y1, x2, y2))
