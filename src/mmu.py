@@ -93,7 +93,6 @@ class Mmu:
         if addr < 0x8000:
             # Restricted ROM access here... do not write
             # TODO Handle banking
-            print("TRY HERE")
             self._handle_banking(addr, data)
 
         elif addr >= 0xE000 and addr < 0xFE00:

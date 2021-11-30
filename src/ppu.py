@@ -1,4 +1,7 @@
+from enum import Enum
 from constants import (
+    BACKGROUND_SCROLL_X,
+    BACKGROUND_SCROLL_Y,
     CURRENT_SCANLINE_ADDR,
     CYCLES_PER_SCANLINE,
     GB_COLORS,
@@ -7,7 +10,7 @@ from constants import (
     MAX_SCANLINE_VALUE
 )
 from mmu import Mmu
-from utils import get_bit_val, is_bit_set
+from utils import get_bit_val, is_bit_set, set_bit
 
 
 class LcdControl:
@@ -34,8 +37,42 @@ class LcdControl:
 
         return is_bit_set(self.memory.read_byte(LCD_CONTROL_ADDR), 7)
 
-    def get_background_tile_data_area(self):
-        return 0x8000 if is_bit_set(self.memory.read_byte(LCD_CONTROL_ADDR), 4) else 0x8800
+    def get_background_tile_data_area(self) -> int:
+        '''
+        Get the start address for the background/window tiles
+        '''
+
+        return 0x8000 if is_bit_set(self.memory.read_byte(LCD_CONTROL_ADDR), 4) else 0x9000
+
+    def is_background_tile_data_addressing_signed(self) -> bool:
+        '''
+        Depending on addressing mode for backgroudn tiles, determine if the identification number
+        for tiles is signed or unsigned. If we are addressing in mode 1 (starting at 0x9000) it should
+        be signed, which will allow us to look back to address 0x8800
+        '''
+
+        return not is_bit_set(self.memory.read_byte(LCD_CONTROL_ADDR), 4)
+
+    def is_background_enabled(self) -> bool:
+        '''
+        Return True if the Background is currently enabled and able to be drawn
+        '''
+
+        return is_bit_set(self.memory.read_byte(LCD_CONTROL_ADDR), 0)
+
+    def get_background_tile_map_area(self) -> int:
+        '''
+        Gets the starting address of the current background tile map
+        '''
+
+        return 0x9C00 if is_bit_set(self.memory.read_byte(LCD_CONTROL_ADDR), 3) else 0x9800
+
+
+class LcdMode(Enum):
+    H_BLANK = 0
+    V_BLANK = 1
+    SPRITE_SEARCH = 2
+    LCD_TRANSFER = 3
 
 
 class LcdStatus:
@@ -62,6 +99,31 @@ class LcdStatus:
 
     def set_status(self):
         self.memory.write_byte(LCD_STATUS_ADDR)
+
+    def get_mode(self) -> LcdMode:
+        '''
+        Returns the current LCD mode from the Status register
+        '''
+
+        msb = get_bit_val(self.memory.read_byte(LCD_STATUS_ADDR), 1)
+        lsb = get_bit_val(self.memory.read_byte(LCD_STATUS_ADDR), 0)
+        lcd_mode = msb << 1 | lsb
+
+        match lcd_mode:
+            case 0: return LcdMode.H_BLANK,
+            case 1: return LcdMode.V_BLANK,
+            case 2: return LcdMode.SPRITE_SEARCH,
+            case 3: return LcdMode.LCD_TRANSFER
+
+    def set_mode(self, mode: LcdMode):
+        '''
+        Set the current LCD mode into the Status register
+        '''
+
+        val = mode.value
+        current_status = self.get_status()
+        current_status |= val
+        self.set_status(current_status)
 
 
 class Ppu:
@@ -125,13 +187,18 @@ class Ppu:
 
     def get_tiles(self):
         '''
-        Get all the tiles in VRAM
+        Get all the tiles in VRAM - This is used for debugging purposes
         '''
 
         # Let's just start with BG tiles for now
         # Get the address that background/window tiles are in from LCD control
-        start_addr = self.lcd_control.get_background_tile_data_area()
-        addr_space_len = 0x800
+        is_tile_identifier_signed = self.lcd_control.is_background_tile_data_addressing_signed()
+        addr_space_len = 0xFFF
+
+        if not is_tile_identifier_signed:
+            start_addr = self.lcd_control.get_background_tile_data_area()
+        else:
+            start_addr = self.lcd_control.get_background_tile_data_area() - int(addr_space_len / 2)
 
         tiles = []
         counter = 0
@@ -167,6 +234,39 @@ class Ppu:
 
         return tiles
 
+    def is_background_enabled(self) -> bool:
+        return self.lcd_control.is_background_enabled()
+
+    def get_background_tile_map(self) -> list[int]:
+        '''
+        Get the current background tile map to be able to determine
+        which tiles to draw to the screen. Tile map can be at one of two addresses
+        depending on LCD Control Bit 3, so get the appropriate address. The map is 32x32
+        which is 1024 bytes (0x400)
+        '''
+
+        tile_map_len = 0x400
+        tile_map_addr = self.lcd_control.get_background_tile_map_area()
+        tile_map = []
+        for i in range(tile_map_addr, tile_map_len):
+            tile_map.append(self.memory.read_byte(i))
+
+        return tile_map
+
+    def get_background_scroll_x(self) -> int:
+        '''
+        Get the X Scroll position of the background
+        '''
+
+        return self.memory.read_byte(BACKGROUND_SCROLL_X)
+
+    def get_background_scroll_y(self) -> int:
+        '''
+        Get the X Scroll position of the background
+        '''
+
+        return self.memory.read_byte(BACKGROUND_SCROLL_Y)
+
     def _get_color(self, color_id: int):
         '''
         Get the color based on ID and current color pallette
@@ -187,11 +287,3 @@ class Ppu:
             case _: raise Exception(f"Invalid color_id - {color_id}")
 
         return GB_COLORS[color]
-
-    # def debug_vram(self):
-    #     # print(self.memory.read_byte(0x8800))
-    #     for i in range(0x8000, 0x9800):
-    #         print(format(i, '04X') + " - " + format(self.memory.read_byte(i), '02X'))
-    #     # if self.debug and self.memory.read_byte(0x8000) > 0:
-    #     #     self.debug = False
-    #     #     print(format(0x8000, '04X'), format(self.memory.read_byte(0x8000), '02X'))

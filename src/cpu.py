@@ -204,8 +204,9 @@ class Cpu:
         # Testing for Blargg output
         if addr == 0xFF01:
             # print(str(self.debug_ctr) + " - " + format(addr, '0x'), format(data, '0x'))
-            print(chr(data), end="")
-            self.debug_ctr += 1
+            if self._read_memory(0xFF02) == 0x81:
+                print(chr(data), end="")
+                self.debug_ctr += 1
 
         self.memory.write_byte(addr, data)
 
@@ -794,9 +795,12 @@ class Cpu:
 
         match opcode.code:
             case 0xC2:
-                self.program_counter = self._get_next_byte() if not self._is_zero_flag_set() else self.program_counter + 1
+                self.program_counter = self._get_next_word() if not self._is_zero_flag_set() else self.program_counter + 1
                 cycles = opcode.alt_cycles if self._is_zero_flag_set() else cycles
             case 0xC3: self.program_counter = self._get_next_word()
+            case 0xCA:
+                self.program_counter = self._get_next_word() if self._is_zero_flag_set() else self.program_counter + 1
+                cycles = opcode.alt_cycles if not self._is_zero_flag_set() else cycles
             case 0xE9: self.program_counter = self.hl.value
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
@@ -934,6 +938,7 @@ class Cpu:
             case 0x7E: self.af.hi = self._read_memory(self.hl.value)
             case 0x7F: self.af.hi = self.af.hi
             case 0x3E: self.af.hi = self._get_next_byte()
+            case 0xE2: self._write_memory(0xFF00 + self.bc.lo, self.af.hi)
             case 0xEA: self._write_memory(self._get_next_word(), self.af.hi)
             case 0xF8:
                 offset = self._get_next_byte_signed()
@@ -1077,6 +1082,10 @@ class Cpu:
         cycles = opcode.cycles
 
         match opcode.code:
+            case 0xC0:
+                self.program_counter = self._pop_word_from_stack() \
+                    if not self._is_zero_flag_set() else self.program_counter + 1
+                cycles = opcode.alt_cycles if self._is_zero_flag_set() else cycles
             case 0xC8:
                 self.program_counter = self._pop_word_from_stack() \
                     if self._is_zero_flag_set() else self.program_counter + 1

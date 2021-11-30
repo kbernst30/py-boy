@@ -31,6 +31,12 @@ MAX_SCANLINE_VALUE = 153
 
 CYCLES_PER_SCANLINE = 456  # It takes 456 clock cycles to draw one scanline
 
+# SCX and SCY registers - Those specify the top-left coordinates
+# of the visible 160×144 pixel area within the 256×256 pixels BG map.
+# Values in the range 0–255 may be used.
+BACKGROUND_SCROLL_Y = 0xFF42
+BACKGROUND_SCROLL_X = 0xFF43
+
 # Banking
 ROM_BANKING_MODE_ADDR = 0x147
 RAM_BANK_COUNT_ADDR = 0x148
