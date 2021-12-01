@@ -35,6 +35,11 @@ class Mmu:
         # RAM access is disabled by default, and must explicitly be enabled
         self.enable_ram = False
 
+        # Restrict some areas of memory if LCD is in certain modes
+        self.oam_access = True
+        self.color_pallette_access = True  # TODO CGB only
+        self.vram_access = True
+
         self.reset()
 
     def reset(self):
@@ -81,7 +86,14 @@ class Mmu:
         TODO deal with addresses on case basis - basically need to deal with MBC modes
         '''
 
-        return self.memory[addr]
+        is_reading_restricted_oam = addr >= 0xFE00 and addr <= 0xFE9F and not self.oam_access
+        is_reading_restricted_vram = addr >= 0x8000 and addr <= 0x9FFF and not self.vram_access
+
+        if is_reading_restricted_oam or is_reading_restricted_vram:
+            # Reading something currently restricted, return garbage (0xFF)
+            return 0xFF
+        else:
+            return self.memory[addr]
 
     def write_byte(self, addr: int, data: int):
         '''
@@ -90,7 +102,14 @@ class Mmu:
         TODO deal with addresses on case basis
         '''
 
-        if addr < 0x8000:
+        is_writing_restricted_oam = addr >= 0xFE00 and addr <= 0xFE9F and not self.oam_access
+        is_writing_restricted_vram = addr >= 0x8000 and addr <= 0x9FFF and not self.vram_access
+
+        if is_writing_restricted_oam or is_writing_restricted_vram:
+            # IF attempting to write to currently restricted memory, just do nothing
+            pass
+
+        elif addr < 0x8000:
             # Restricted ROM access here... do not write
             # TODO Handle banking
             self._handle_banking(addr, data)
@@ -129,6 +148,48 @@ class Mmu:
         '''
 
         self.memory[CURRENT_SCANLINE_ADDR] = 0
+
+    def restrict_oam_access(self):
+        '''
+        Restrict access to OAM - needed for certain LCD modes
+        '''
+
+        self.oam_access = False
+
+    def open_oam_access(self):
+        '''
+        Open access to OAM - needed for certain LCD modes
+        '''
+
+        self.oam_access = True
+
+    def restrict_color_pallette_access(self):
+        '''
+        Restrict access to CGB Color Pallette - needed for certain LCD modes
+        '''
+
+        self.color_pallette_access = False
+
+    def open_color_pallette_access(self):
+        '''
+        Open access to CGB Color Pallette - needed for certain LCD modes
+        '''
+
+        self.color_pallette_access = True
+
+    def restrict_vram_access(self):
+        '''
+        Restrict access to VRAM - needed for certain LCD modes
+        '''
+
+        self.vram_access = False
+
+    def open_vram_access(self):
+        '''
+        Open access to VRAM - needed for certain LCD modes
+        '''
+
+        self.vram_access = True
 
     def _handle_banking(self, addr: int, data: int):
         '''

@@ -24,6 +24,12 @@ class Pixel(sdl2.ext.Entity):
         self.sprite.position = posx, posy
 
 
+# class PixelFetcher:
+
+#     def __init__(self, ppu: Ppu):
+#         self.ppu = ppu
+
+
 class MainDisplay:
 
     DISPLAY_FACTOR = 4
@@ -46,7 +52,7 @@ class MainDisplay:
 
         self.factory = sdl2.ext.SpriteFactory(sdl2.ext.SOFTWARE)
 
-        self.debug = True
+        self.debug = False
 
     def show(self):
         self.window.show()
@@ -55,16 +61,6 @@ class MainDisplay:
         # processor.run(self.window)
         # for x in range(SCREEN_WIDTH):
         #     self.draw(x, 10, 0x000000)
-
-    def draw_scanline(self):
-        '''
-        Draw a specific scanline to the display
-        '''
-
-        if self.ppu.is_background_enabled():
-            self._render_background()
-
-        # TODO sprites
 
     def render_screen(self):
         if self.debug:
@@ -105,6 +101,3 @@ class MainDisplay:
         y2 = self.DISPLAY_FACTOR
 
         self.renderer.draw(color, (x1, y1, x2, y2))
-
-    def _render_background(self):
-        pass

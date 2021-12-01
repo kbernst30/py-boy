@@ -1,3 +1,13 @@
+from enum import Enum
+
+
+class LcdMode(Enum):
+    H_BLANK = 0
+    V_BLANK = 1
+    SPRITE_SEARCH = 2
+    LCD_TRANSFER = 3
+
+
 def is_bit_set(data: int, position: int) -> bool:
     return (data & (1 << position)) > 0
 

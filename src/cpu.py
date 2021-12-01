@@ -110,6 +110,9 @@ class Cpu:
         # Interrupts
         self.interrupts_enabled = True
 
+        # For HALT mode - will be disabled when an interrupt occurs
+        self.halted = False
+
         self.debug_ctr = 0
         self.debug_set = set()
 
@@ -132,6 +135,10 @@ class Cpu:
 
         :return the number of cycles the operation took
         '''
+
+        # If in HALT mode, effectively stop the clock by not returning any cycles
+        if self.halted:
+            return 0
 
         op = self._read_memory(self.program_counter)
         opcode = opcodes_map[op]
@@ -164,6 +171,7 @@ class Cpu:
             case Operation.DEC_16_BIT: return self._do_decrement_16_bit(opcode)
             case Operation.DI: return self._do_disable_interrupts(opcode)
             case Operation.EI: return self._do_enable_interrupts(opcode)
+            case Operation.HALT: return self._do_halt(opcode)
             case Operation.INC: return self._do_increment_8_bit(opcode)
             case Operation.INC_16_BIT: return self._do_increment_16_bit(opcode)
             case Operation.JP: return self._do_jump(opcode)
@@ -719,6 +727,19 @@ class Cpu:
         '''
 
         self.interrupts_enabled = True
+        return opcode.cycles
+
+    def _do_halt(self, opcode: OpCode) -> int:
+        '''
+        Enter HALT mode if interrupts are enabled, otherwise skip the program counter forward
+        over the next instruction
+        '''
+
+        if self.interrupts_enabled:
+            self.halted = True
+        else:
+            self.program_counter += 1
+
         return opcode.cycles
 
     def _do_increment_8_bit(self, opcode: OpCode) -> int:

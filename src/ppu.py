@@ -1,16 +1,18 @@
-from enum import Enum
 from constants import (
     BACKGROUND_SCROLL_X,
     BACKGROUND_SCROLL_Y,
+    COLOR_PALLETTE_ADDR,
     CURRENT_SCANLINE_ADDR,
     CYCLES_PER_SCANLINE,
     GB_COLORS,
     LCD_CONTROL_ADDR,
     LCD_STATUS_ADDR,
-    MAX_SCANLINE_VALUE
+    MAX_CYCLES_PER_FRAME,
+    MAX_SCANLINE_VALUE,
+    SCREEN_WIDTH
 )
 from mmu import Mmu
-from utils import get_bit_val, is_bit_set, set_bit
+from utils import get_bit_val, is_bit_set, LcdMode
 
 
 class LcdControl:
@@ -68,13 +70,6 @@ class LcdControl:
         return 0x9C00 if is_bit_set(self.memory.read_byte(LCD_CONTROL_ADDR), 3) else 0x9800
 
 
-class LcdMode(Enum):
-    H_BLANK = 0
-    V_BLANK = 1
-    SPRITE_SEARCH = 2
-    LCD_TRANSFER = 3
-
-
 class LcdStatus:
     '''
     STAT - the main LCD status register, located in memory. The different bits
@@ -95,10 +90,10 @@ class LcdStatus:
         self.memory = memory
 
     def get_status(self):
-        self.memory.read_byte(LCD_STATUS_ADDR)
+        return self.memory.read_byte(LCD_STATUS_ADDR)
 
-    def set_status(self):
-        self.memory.write_byte(LCD_STATUS_ADDR)
+    def set_status(self, status: int):
+        self.memory.write_byte(LCD_STATUS_ADDR, status)
 
     def get_mode(self) -> LcdMode:
         '''
@@ -138,6 +133,13 @@ class Ppu:
 
         self.debug = True
 
+    def get_current_scanline(self) -> int:
+        '''
+        Return the current scanline that the PPU is working on
+        '''
+
+        return self.memory.read_byte(CURRENT_SCANLINE_ADDR)
+
     def update_graphics(self, cycles: int):
         '''
         Attempt to update the graphics. If we have taken more than the number
@@ -170,8 +172,7 @@ class Ppu:
                 self.memory.reset_scanline()
 
             else:
-                # TODO Draw the next scanline
-                pass
+                self.draw_scanline()
 
     def update_lcd_status(self):
         '''
@@ -179,11 +180,78 @@ class Ppu:
         state of the hardware
         '''
 
-        if not self.lcd_control.is_lcd_enabled():
-            # LCD is disabled, this means we are in VBlank, so reset scanline
-            # self.scanline_counter = CYCLES_PER_SCANLINE
-            # self.memory.reset_scanline()
-            pass
+        scanline = self.memory.read_byte(CURRENT_SCANLINE_ADDR)
+
+        # TODO do i need this??
+        # if not self.lcd_control.is_lcd_enabled():
+        #     # LCD is disabled, this means we are in VBlank, so reset scanline
+        #     self.scanline_counter = CYCLES_PER_SCANLINE
+        #     self.memory.reset_scanline()
+
+        #     # Set VBlank mode to LCD Status
+        #     self.lcd_status.set_mode(LcdMode.V_BLANK)
+
+        #     self.memory.open_oam_access()
+        #     self.memory.open_vram_access()
+
+        #     return
+
+        # If LCD is enabled, we should cycle through different LCD modes depending on what
+        # "dot" we are drawing in the current scanline. We have 456 cycles per scanline
+        # for scanlines 0-143. This is broken down as follows:
+        #   Length 80 Dots - Mode 2 - Sprite (OAM) Scan
+        #   Length 168 - 291 dots (depending on sprite count) - Mode 3 - LCD Transfer (use 172 for now)
+        #   Length 85 - 208 Dots (depending on previous length) - Mode 0 - HBlank (use 204 for now)
+        # If we are operating on a scanline greater than the visible screen (i.e. scanline >= 144)
+        # We are in VBlank and should set LCD status to that mode
+        if scanline >= 144:
+            self.lcd_status.set_mode(LcdMode.V_BLANK)
+
+            self.memory.open_oam_access()
+            self.memory.open_vram_access()
+
+            # TODO SHould request interrupt if enabled
+
+        else:
+            if self.scanline_counter >= MAX_CYCLES_PER_FRAME - 80:
+                # This is mode 2
+                self.lcd_status.set_mode(LcdMode.SPRITE_SEARCH)
+
+                # Restrict OAM access for Mode 2
+                self.memory.restrict_oam_access()
+                self.memory.open_vram_access()
+
+                # TODO SHould request interrupt if enabled
+
+            elif self.scanline_counter >= MAX_CYCLES_PER_FRAME - 80 - 172:
+                # This is mode 3
+                self.lcd_status.set_mode(LcdMode.LCD_TRANSFER)
+
+                # Restrict OAM and VRAM access for Mode 3
+                self.memory.restrict_oam_access()
+                self.memory.restrict_vram_access()
+
+            else:
+                # This is mode 0
+                self.lcd_status.set_mode(LcdMode.H_BLANK)
+
+                self.memory.open_oam_access()
+                self.memory.open_vram_access()
+
+                # TODO SHould request interrupt if enabled
+
+        # TODO some other interrupts we might need to request here - If mode changed
+        # or if Compare scanline is same as current scanline
+
+    def draw_scanline(self):
+        '''
+        Draw a specific scanline to the display
+        '''
+
+        if self.is_background_enabled():
+            self._render_background()
+
+        # TODO sprites
 
     def get_tiles(self):
         '''
@@ -223,7 +291,7 @@ class Ppu:
                 least_significant_bit = get_bit_val(byte_1, i)
                 most_significant_bit = get_bit_val(byte_2, i)
                 color_id = (most_significant_bit << 1) | least_significant_bit
-                color = self._get_color(color_id)
+                color = self._get_color_from_id(color_id)
                 line.append(color)
 
             current_tile.append(line)
@@ -233,6 +301,24 @@ class Ppu:
                 current_tile = []
 
         return tiles
+
+    def get_background_tile(self, x: int, y: int) -> list[list[int]]:
+        '''
+        Get a given tile for the x and y position on screen
+        '''
+
+        tile_map_addr = self.lcd_control.get_background_tile_map_area()
+        x_offset = int(x / 8)
+        y_offset = (int(y / 8) * 32) & 0xFF
+
+        tile_identifier = self.memory.read_byte(tile_map_addr + x_offset + y_offset)
+        is_tile_identifier_signed = self.lcd_control.is_background_tile_data_addressing_signed()
+        if is_tile_identifier_signed:
+            tile_identifier -= 256
+
+        # Recall each tile occupies 16 bytes of memory so go through all 16, properly using
+        # 2 bytes per line to get the tile
+        yield [self._get_tile_line(tile_identifier, i) for i in range(0, 16, 2)]
 
     def is_background_enabled(self) -> bool:
         return self.lcd_control.is_background_enabled()
@@ -248,7 +334,7 @@ class Ppu:
         tile_map_len = 0x400
         tile_map_addr = self.lcd_control.get_background_tile_map_area()
         tile_map = []
-        for i in range(tile_map_addr, tile_map_len):
+        for i in range(tile_map_addr, tile_map_addr + tile_map_len):
             tile_map.append(self.memory.read_byte(i))
 
         return tile_map
@@ -267,12 +353,36 @@ class Ppu:
 
         return self.memory.read_byte(BACKGROUND_SCROLL_Y)
 
-    def _get_color(self, color_id: int):
+    def _get_tile_line(self, tile_identifier: int, offset: int) -> list[int]:
+        '''
+        Get the line in a tile (8 pixels) given the existing tile identifier.
+        Offset is used to get the correct pixel based on which bytes we are looking at
+        '''
+
+        tile_data_addr = self.lcd_control.get_background_tile_data_area()
+        addr = tile_data_addr + (tile_identifier * 16)
+        tile_data_low = self.memory.read_byte(addr + offset)
+        tile_data_high = self.memory.read_byte(addr + offset + 1)
+
+        # Loop through pixels left to right as that's the order in the tile (bit 7 - 0)
+        yield [self._get_color(tile_data_low, tile_data_high, j) for j in range(7, -1, -1)]
+
+    def _get_color(self, tile_data_low: int, tile_data_high: int, bit: int) -> int:
+        '''
+        Get the color ID based on the 2 bytes of the tile being looked at
+        The ID will later be mapped onto the palette to get the right color
+        '''
+
+        least_significant_bit = get_bit_val(tile_data_low, bit)
+        most_significant_bit = get_bit_val(tile_data_high, bit)
+        self._get_color_from_id((most_significant_bit << 1) | least_significant_bit)
+
+    def _get_color_from_id(self, color_id: int):
         '''
         Get the color based on ID and current color pallette
         '''
 
-        pallette = self.memory.read_byte(0xFF47)  # this register is where the color pallette is
+        pallette = self.memory.read_byte(COLOR_PALLETTE_ADDR)  # this register is where the color pallette is
 
         # The pallette bits define colors as such (using color ID from 0 - 1)
         # Bit 7-6 - Color for index 3
@@ -287,3 +397,15 @@ class Ppu:
             case _: raise Exception(f"Invalid color_id - {color_id}")
 
         return GB_COLORS[color]
+
+    def _render_background(self):
+        # TODO deal with the Window
+
+        def get_tile(i):
+            x_pos = (int(self.get_background_scroll_x() / 8) + i) & 0x1F
+            y_pos = (self.get_background_scroll_y() + self.get_current_scanline()) & 0xFF
+            yield self.get_background_tile(x_pos, y_pos)
+
+        # Get all the tiles needed for a given scanline
+        tiles = [get_tile(i) for i in range(0, SCREEN_WIDTH)]
+        print(tiles)
