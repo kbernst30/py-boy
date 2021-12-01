@@ -9,6 +9,7 @@ from constants import (
     LCD_STATUS_ADDR,
     MAX_CYCLES_PER_FRAME,
     MAX_SCANLINE_VALUE,
+    SCREEN_HEIGHT,
     SCREEN_WIDTH
 )
 from mmu import Mmu
@@ -131,7 +132,13 @@ class Ppu:
         # It takes 456 clock cycles to draw one scanline
         self.scanline_counter = CYCLES_PER_SCANLINE
 
+        # Create an array to hold the state of the LCD
+        self.screen = [[0 for _ in range(SCREEN_HEIGHT)] for _ in range(SCREEN_WIDTH)]
+
         self.debug = True
+
+    def get_screen(self) -> list[list[int]]:
+        return self.screen
 
     def get_current_scanline(self) -> int:
         '''
@@ -318,7 +325,7 @@ class Ppu:
 
         # Recall each tile occupies 16 bytes of memory so go through all 16, properly using
         # 2 bytes per line to get the tile
-        yield [self._get_tile_line(tile_identifier, i) for i in range(0, 16, 2)]
+        return [self._get_tile_line(tile_identifier, i) for i in range(0, 16, 2)]
 
     def is_background_enabled(self) -> bool:
         return self.lcd_control.is_background_enabled()
@@ -365,7 +372,7 @@ class Ppu:
         tile_data_high = self.memory.read_byte(addr + offset + 1)
 
         # Loop through pixels left to right as that's the order in the tile (bit 7 - 0)
-        yield [self._get_color(tile_data_low, tile_data_high, j) for j in range(7, -1, -1)]
+        return [self._get_color(tile_data_low, tile_data_high, j) for j in range(7, -1, -1)]
 
     def _get_color(self, tile_data_low: int, tile_data_high: int, bit: int) -> int:
         '''
@@ -375,7 +382,7 @@ class Ppu:
 
         least_significant_bit = get_bit_val(tile_data_low, bit)
         most_significant_bit = get_bit_val(tile_data_high, bit)
-        self._get_color_from_id((most_significant_bit << 1) | least_significant_bit)
+        return self._get_color_from_id((most_significant_bit << 1) | least_significant_bit)
 
     def _get_color_from_id(self, color_id: int):
         '''
@@ -401,11 +408,20 @@ class Ppu:
     def _render_background(self):
         # TODO deal with the Window
 
-        def get_tile(i):
-            x_pos = (int(self.get_background_scroll_x() / 8) + i) & 0x1F
-            y_pos = (self.get_background_scroll_y() + self.get_current_scanline()) & 0xFF
-            yield self.get_background_tile(x_pos, y_pos)
+        current_scanline = self.get_current_scanline()
 
-        # Get all the tiles needed for a given scanline
-        tiles = [get_tile(i) for i in range(0, SCREEN_WIDTH)]
-        print(tiles)
+        def get_pixels():
+            y_pos = (self.get_background_scroll_y() + current_scanline) & 0xFF
+            for i in range(0, SCREEN_WIDTH):
+                x_pos = (int(self.get_background_scroll_x() / 8) + i) & 0x1F
+                tile = self.get_background_tile(x_pos, y_pos)
+                yield tile[x_pos % 8][y_pos % 8]
+
+        # Get all the pixels needed for a given scanline
+        # pixels = [get_pixel(i) for i in range(0, SCREEN_WIDTH)]
+        pixels = get_pixels()
+        i = 0
+        for pixel in pixels:
+            if current_scanline < SCREEN_HEIGHT and current_scanline > 0:
+                self.screen[i][current_scanline] = pixel
+                i += 1

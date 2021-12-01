@@ -85,6 +85,14 @@ class MainDisplay:
                 # print("\n")
                 x += 8
 
+        else:
+            screen = self.ppu.get_screen()
+            for row in range(len(screen)):
+                for col in range(len(screen[row])):
+                    # color = screen[row][col] if type(screen[row][col]) is int else next(screen[row][col])
+                    color = screen[row][col]
+                    self.draw(row, col, color)
+
     def refresh(self):
         self.window.refresh()
 
