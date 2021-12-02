@@ -309,23 +309,26 @@ class Ppu:
 
         return tiles
 
-    def get_background_tile(self, x: int, y: int) -> list[list[int]]:
+    def get_background_tile_pixels(self, y: int) -> list[int]:
         '''
-        Get a given tile for the x and y position on screen
+        Generate a line of pixels in a tile for a line at y position on screen
         '''
 
-        tile_map_addr = self.lcd_control.get_background_tile_map_area()
-        x_offset = int(x / 8)
-        y_offset = (int(y / 8) * 32) & 0xFF
+        for i in range(0, SCREEN_WIDTH):
+            x = self.get_background_scroll_x() + i
 
-        tile_identifier = self.memory.read_byte(tile_map_addr + x_offset + y_offset)
-        is_tile_identifier_signed = self.lcd_control.is_background_tile_data_addressing_signed()
-        if is_tile_identifier_signed:
-            tile_identifier -= 256
+            tile_map_addr = self.lcd_control.get_background_tile_map_area()
+            x_offset = int(x / 8)
+            y_offset = int(y / 8) * 32
 
-        # Recall each tile occupies 16 bytes of memory so go through all 16, properly using
-        # 2 bytes per line to get the tile
-        return [self._get_tile_line(tile_identifier, i) for i in range(0, 16, 2)]
+            tile_identifier = self.memory.read_byte(tile_map_addr + x_offset + y_offset)
+            is_tile_identifier_signed = self.lcd_control.is_background_tile_data_addressing_signed()
+            if is_tile_identifier_signed:
+                tile_identifier -= 256
+
+            # Recall each tile occupies 16 bytes of memory so ensure we account fo 16 total
+            # bytes when finding the right y position.
+            yield self._get_tile_line_pixel(tile_identifier, (y % 8) * 2, (7 - x) % 8)
 
     def is_background_enabled(self) -> bool:
         return self.lcd_control.is_background_enabled()
@@ -360,9 +363,9 @@ class Ppu:
 
         return self.memory.read_byte(BACKGROUND_SCROLL_Y)
 
-    def _get_tile_line(self, tile_identifier: int, offset: int) -> list[int]:
+    def _get_tile_line_pixel(self, tile_identifier: int, offset: int, x: int) -> int:
         '''
-        Get the line in a tile (8 pixels) given the existing tile identifier.
+        Get the pixel of a line in a tile (8 pixels) given the existing tile identifier.
         Offset is used to get the correct pixel based on which bytes we are looking at
         '''
 
@@ -372,7 +375,8 @@ class Ppu:
         tile_data_high = self.memory.read_byte(addr + offset + 1)
 
         # Loop through pixels left to right as that's the order in the tile (bit 7 - 0)
-        return [self._get_color(tile_data_low, tile_data_high, j) for j in range(7, -1, -1)]
+        # return [self._get_color(tile_data_low, tile_data_high, j) for j in range(7, -1, -1)]
+        return self._get_color(tile_data_low, tile_data_high, x)
 
     def _get_color(self, tile_data_low: int, tile_data_high: int, bit: int) -> int:
         '''
@@ -412,10 +416,7 @@ class Ppu:
 
         def get_pixels():
             y_pos = (self.get_background_scroll_y() + current_scanline) & 0xFF
-            for i in range(0, SCREEN_WIDTH):
-                x_pos = (int(self.get_background_scroll_x() / 8) + i) & 0x1F
-                tile = self.get_background_tile(x_pos, y_pos)
-                yield tile[x_pos % 8][y_pos % 8]
+            return self.get_background_tile_pixels(y_pos)
 
         # Get all the pixels needed for a given scanline
         # pixels = [get_pixel(i) for i in range(0, SCREEN_WIDTH)]

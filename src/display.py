@@ -13,6 +13,13 @@ class SoftwareRenderer(sdl2.ext.SoftwareSpriteRenderSystem):
     #     sdl2.ext.fill(self.surface, sdl2.ext.Color(255, 255, 255))
     #     super(SoftwareRenderer, self).render(components)
 
+    def refresh(self):
+        '''
+        Clear screen back to white
+        '''
+
+        sdl2.ext.fill(self.surface, sdl2.ext.Color(255, 255, 255))
+
     def draw(self, color, area):
         sdl2.ext.fill(self.surface, color, area)
 
@@ -63,6 +70,7 @@ class MainDisplay:
         #     self.draw(x, 10, 0x000000)
 
     def render_screen(self):
+        self.renderer.refresh()
         if self.debug:
             tiles = self.ppu.get_tiles()
 
