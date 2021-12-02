@@ -163,9 +163,9 @@ class Ppu:
             self.scanline_counter -= cycles
 
         # We have run the number of necessary cycles to draw a scanline
-        if self.scanline_counter < 0:
+        if self.scanline_counter <= 0:
             # print(self.scanline_counter)
-            self.scanline_counter += CYCLES_PER_SCANLINE
+            self.scanline_counter = CYCLES_PER_SCANLINE
 
             # TODO Draw the next scanline
             self.memory.update_scanline()

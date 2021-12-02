@@ -143,17 +143,18 @@ class Cpu:
         op = self._read_memory(self.program_counter)
         opcode = opcodes_map[op]
 
-        # if self.debug_ctr < 1258895:
+        if self.debug_ctr < 1258895:
         # if self.debug_ctr < 16510:
-            # self._debug()
-            # self.debug_ctr += 1
+            self._debug()
+            self.debug_ctr += 1
         #     self.debug_set.add(f"{format(op, '02X')} - {opcode.mnemonic} - {opcode.cycles} - {opcode.alt_cycles}")
 
-        #     if self.debug_ctr == 16510:
-        #         for item in self.debug_set:
-        #             print(item)
+            # if self.debug_ctr == 16510:
+            #     for item in self.debug_set:
+            #         print(item)
 
         # self._debug(opcode)
+        self.debug_set.add(f"{format(op, '02X')} - {opcode.mnemonic} - {opcode.cycles} - {opcode.alt_cycles}")
         self.program_counter += 1
 
         # print(opcode.mnemonic)
@@ -214,6 +215,10 @@ class Cpu:
             # print(str(self.debug_ctr) + " - " + format(addr, '0x'), format(data, '0x'))
             if self._read_memory(0xFF02) == 0x81:
                 print(chr(data), end="")
+                # if chr(data) == '\n':
+                #     # print(self.debug_set)
+                #     for item in self.debug_set:
+                #         print(item)
                 self.debug_ctr += 1
 
         self.memory.write_byte(addr, data)
@@ -1019,7 +1024,7 @@ class Cpu:
                 self.af.hi |= self._read_memory(self.hl.value)
                 val = self.af.hi
             case 0xB7:
-                self.af.hi |= self.af.lo
+                self.af.hi |= self.af.hi
                 val = self.af.hi
             case 0xF6:
                 self.af.hi |= self._get_next_byte()
@@ -1105,20 +1110,20 @@ class Cpu:
         match opcode.code:
             case 0xC0:
                 self.program_counter = self._pop_word_from_stack() \
-                    if not self._is_zero_flag_set() else self.program_counter + 1
+                    if not self._is_zero_flag_set() else self.program_counter
                 cycles = opcode.alt_cycles if self._is_zero_flag_set() else cycles
             case 0xC8:
                 self.program_counter = self._pop_word_from_stack() \
-                    if self._is_zero_flag_set() else self.program_counter + 1
+                    if self._is_zero_flag_set() else self.program_counter
                 cycles = opcode.alt_cycles if not self._is_zero_flag_set() else cycles
             case 0xC9: self.program_counter = self._pop_word_from_stack()
             case 0xD0:
                 self.program_counter = self._pop_word_from_stack() \
-                    if not self._is_carry_flag_set() else self.program_counter + 1
+                    if not self._is_carry_flag_set() else self.program_counter
                 cycles = opcode.alt_cycles if self._is_carry_flag_set() else cycles
             case 0xD8:
                 self.program_counter = self._pop_word_from_stack() \
-                    if self._is_carry_flag_set() else self.program_counter + 1
+                    if self._is_carry_flag_set() else self.program_counter
                 cycles = opcode.alt_cycles if not self._is_carry_flag_set() else cycles
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
@@ -1637,14 +1642,14 @@ class Cpu:
 
     # flake8: noqa: E741 E501
     def _debug(self):
-        # a = format(self.af.hi, '02X')
-        # f = format(self.af.lo, '02X')
-        # b = format(self.bc.hi, '02X')
-        # c = format(self.bc.lo, '02X')
-        # d = format(self.de.hi, '02X')
-        # e = format(self.de.lo, '02X')
-        # h = format(self.hl.hi, '02X')
-        # l = format(self.hl.lo, '02X')
+        a = format(self.af.hi, '02X')
+        f = format(self.af.lo, '02X')
+        b = format(self.bc.hi, '02X')
+        c = format(self.bc.lo, '02X')
+        d = format(self.de.hi, '02X')
+        e = format(self.de.lo, '02X')
+        h = format(self.hl.hi, '02X')
+        l = format(self.hl.lo, '02X')
         af = format(self.af.value, '04X')
         bc = format(self.bc.value, '04X')
         de = format(self.de.value, '04X')
@@ -1657,11 +1662,11 @@ class Cpu:
         pc_3 = format(self._read_memory(self.program_counter + 2), '02X')
         pc_4 = format(self._read_memory(self.program_counter + 3), '02X')
 
-        # with open("debug.txt", "a") as debug_file:
-        #     debug_file.write(f'A: {a} F: {f} B: {b} C: {c} D: {d} E: {e} H: {h} L: {l} SP: {sp} PC: 00:{pc} ({pc_1} {pc_2} {pc_3} {pc_4})\n')
+        with open("debug.txt", "a") as debug_file:
+            debug_file.write(f'A: {a} F: {f} B: {b} C: {c} D: {d} E: {e} H: {h} L: {l} SP: {sp} PC: 00:{pc} ({pc_1} {pc_2} {pc_3} {pc_4})\n')
 
         # with open("debug.txt", "a") as debug_file:
         #     debug_file.write(f"AF: {af} BC: {bc} DE: {de} HL: {hl} {format(self.program_counter, '04X')} - {opcode.mnemonic}\n")
 
-        with open("debug.txt", "a") as debug_file:
-            debug_file.write(f'SP: {sp} PC: 00:{pc} ({pc_1} {pc_2} {pc_3} {pc_4})\n')
+        # with open("debug.txt", "a") as debug_file:
+        #     debug_file.write(f'SP: {sp} PC: 00:{pc} ({pc_1} {pc_2} {pc_3} {pc_4})\n')

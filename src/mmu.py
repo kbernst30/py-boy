@@ -79,6 +79,9 @@ class Mmu:
         self.memory[0xFF4B] = 0x00
         self.memory[0xFFFF] = 0x00
 
+        # TEMP
+        self.memory[0xFF44] = 0x0A
+
     def read_byte(self, addr: int) -> int:
         '''
         Read a byte from memory and return
@@ -116,7 +119,8 @@ class Mmu:
 
         elif addr >= 0xE000 and addr < 0xFE00:
             # If we are writing to ECHO (E000-FDFF) we must write to working RAM (C000-CFFF) as well
-            pass
+            if self.enable_ram:
+                print("RAM")
 
         elif addr >= 0xFEA0 and addr < 0xFF00:
             # Restricted area - do NOT allow writing
@@ -132,7 +136,7 @@ class Mmu:
 
     def load_rom(self, rom):
         end_addr = 0x8000
-        for i in range(end_addr):
+        for i in range(min(end_addr, len(rom.data))):
             self.memory[i] = rom.data[i]
 
     def update_scanline(self):
