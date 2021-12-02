@@ -147,14 +147,15 @@ class Cpu:
         # if self.debug_ctr < 16510:
             self._debug()
             self.debug_ctr += 1
-        #     self.debug_set.add(f"{format(op, '02X')} - {opcode.mnemonic} - {opcode.cycles} - {opcode.alt_cycles}")
+            # if self.debug_ctr > 31422 and self.debug_ctr <= 43148:
+            #     self.debug_set.add(f"{format(op, '02X')} - {opcode.mnemonic} - {opcode.cycles} - {opcode.alt_cycles}")
 
-            # if self.debug_ctr == 16510:
+            # if self.debug_ctr == 43149:
             #     for item in self.debug_set:
             #         print(item)
 
         # self._debug(opcode)
-        self.debug_set.add(f"{format(op, '02X')} - {opcode.mnemonic} - {opcode.cycles} - {opcode.alt_cycles}")
+        # self.debug_set.add(f"{format(op, '02X')} - {opcode.mnemonic} - {opcode.cycles} - {opcode.alt_cycles}")
         self.program_counter += 1
 
         # print(opcode.mnemonic)
@@ -219,7 +220,7 @@ class Cpu:
                 #     # print(self.debug_set)
                 #     for item in self.debug_set:
                 #         print(item)
-                self.debug_ctr += 1
+                # self.debug_ctr += 1
 
         self.memory.write_byte(addr, data)
 
