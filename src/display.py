@@ -59,7 +59,7 @@ class MainDisplay:
 
         self.factory = sdl2.ext.SpriteFactory(sdl2.ext.SOFTWARE)
 
-        self.debug = True
+        self.debug = False
 
     def show(self):
         self.window.show()

@@ -13,7 +13,7 @@ class Operation(Enum):
     CP = 9
     INC = 10
     DEC = 11
-    DAA = 12
+    DAA = 1
     CPL = 12
     ADD_16_BIT = 13
     INC_16_BIT = 14

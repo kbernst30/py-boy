@@ -143,10 +143,10 @@ class Cpu:
         op = self._read_memory(self.program_counter)
         opcode = opcodes_map[op]
 
-        if self.debug_ctr < 1258895:
+        # if self.debug_ctr < 1258895:
         # if self.debug_ctr < 16510:
-            self._debug()
-            self.debug_ctr += 1
+            # self._debug()
+            # self.debug_ctr += 1
             # if self.debug_ctr > 31422 and self.debug_ctr <= 43148:
             #     self.debug_set.add(f"{format(op, '02X')} - {opcode.mnemonic} - {opcode.cycles} - {opcode.alt_cycles}")
 
@@ -158,10 +158,6 @@ class Cpu:
         # self.debug_set.add(f"{format(op, '02X')} - {opcode.mnemonic} - {opcode.cycles} - {opcode.alt_cycles}")
         self.program_counter += 1
 
-        if self.debug_ctr == 151141:
-            print(opcode.mnemonic, format(opcode.code, '02X'), opcode.operation)
-        # print(opcode.mnemonic)
-
         match opcode.operation:
             case Operation.ADC: return self._do_add_8_bit(opcode, with_carry=True)
             case Operation.ADD: return self._do_add_8_bit(opcode)
@@ -171,6 +167,7 @@ class Cpu:
             case Operation.CCF: return self._do_complement_carry(opcode)
             case Operation.CP: return self._do_compare(opcode)
             case Operation.CPL: return self._do_complement(opcode)
+            case Operation.DAA: return self._do_daa(opcode)
             case Operation.DEC: return self._do_decrement_8_bit(opcode)
             case Operation.DEC_16_BIT: return self._do_decrement_16_bit(opcode)
             case Operation.DI: return self._do_disable_interrupts(opcode)
@@ -652,6 +649,48 @@ class Cpu:
         self._update_half_carry_flag(False)
         self._update_sub_flag(False)
 
+        return opcode.cycles
+
+    def _do_daa(self, opcode: OpCode) -> int:
+        '''
+        Perform a DAA operation
+        This should adjust the value in register A so that it proper BCD represetnation
+        where the value SHOULD be the result of a previous ADD or SUB of two BCD numbers
+        To adjust properly, we need to add or subtract from the current value
+
+        This algorithm is complicated and should be understood better
+
+        :return the number of cycles needed to execute this operation
+        '''
+
+        val = self.af.hi
+        should_set_carry = False
+
+        if not self._is_sub_flag_set():
+            if self._is_carry_flag_set() or val > 0x99:
+                val += 0x60
+                should_set_carry = True
+
+            if self._is_half_carry_flag_set() or (val & 0x0F) > 0x09:
+                val += 0x6
+
+        else:
+            if self._is_carry_flag_set():
+                val -= 0x60
+                should_set_carry = True
+
+            if self._is_half_carry_flag_set():
+                val -= 0x6
+
+        val &= 0xFF
+        if val < 0:
+            val += 256
+
+        self._update_zero_flag(val == 0)
+        self._update_half_carry_flag(False)
+        self._update_carry_flag(should_set_carry)
+
+        self.af.hi = val
         return opcode.cycles
 
     def _do_decrement_8_bit(self, opcode: OpCode) -> int:
