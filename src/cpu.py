@@ -158,6 +158,8 @@ class Cpu:
         # self.debug_set.add(f"{format(op, '02X')} - {opcode.mnemonic} - {opcode.cycles} - {opcode.alt_cycles}")
         self.program_counter += 1
 
+        if self.debug_ctr == 151141:
+            print(opcode.mnemonic, format(opcode.code, '02X'), opcode.operation)
         # print(opcode.mnemonic)
 
         match opcode.operation:
@@ -427,7 +429,7 @@ class Cpu:
 
             self._update_sub_flag(False)
             self._update_carry_flag(res > 0xFFFF)
-            self._update_half_carry_flag((val_1 & 0xFF) + (val_2 & 0xFF) > 0xFF)
+            self._update_half_carry_flag((val_1 & 0xFFF) + (val_2 & 0xFFF) & 0x1000)
 
             return res & 0xFFFF
 
@@ -822,11 +824,11 @@ class Cpu:
 
         match opcode.code:
             case 0xC2:
-                self.program_counter = self._get_next_word() if not self._is_zero_flag_set() else self.program_counter + 1
+                self.program_counter = self._get_next_word() if not self._is_zero_flag_set() else self.program_counter + 2
                 cycles = opcode.alt_cycles if self._is_zero_flag_set() else cycles
             case 0xC3: self.program_counter = self._get_next_word()
             case 0xCA:
-                self.program_counter = self._get_next_word() if self._is_zero_flag_set() else self.program_counter + 1
+                self.program_counter = self._get_next_word() if self._is_zero_flag_set() else self.program_counter + 2
                 cycles = opcode.alt_cycles if not self._is_zero_flag_set() else cycles
             case 0xE9: self.program_counter = self.hl.value
             case _: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")

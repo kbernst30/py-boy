@@ -168,8 +168,8 @@ class Ppu:
             self.scanline_counter = CYCLES_PER_SCANLINE
 
             # TODO Draw the next scanline
-            self.memory.update_scanline()
             scanline = self.memory.read_byte(CURRENT_SCANLINE_ADDR)
+            self.memory.update_scanline()
 
             if scanline == 144:
                 # Entering VBlank, request interrupt

@@ -60,7 +60,7 @@ class PyBoy:
                     cycles = self.cpu.execute()
                     frame_cycles += cycles
 
-                    self.ppu.update_graphics(cycles)
+                    # self.ppu.update_graphics(cycles)
                     # self.ppu.debug_vram(self.main_display)
 
                 # After execution of a frame, update the screen
