@@ -34,14 +34,18 @@ class RegisterPair:
         self.lo = value & 0xFF
 
     def increment(self):
-        self.value = self.value + 1
-        if self.value > 0xFFFF:
-            self.value = 0
+        val = self.value + 1
+        if val > 0xFFFF:
+            val = 0
+
+        self.value = val
 
     def decrement(self):
-        self.value = self.value - 1
-        if self.value < 0:
-            self.value = 0xFFFF
+        val = self.value - 1
+        if val < 0:
+            val = 0xFFFF
+
+        self.value = val
 
     def increment_lo(self):
         self.lo += 1
@@ -143,10 +147,10 @@ class Cpu:
         op = self._read_memory(self.program_counter)
         opcode = opcodes_map[op]
 
-        # if self.debug_ctr < 1258895:
+        if self.debug_ctr < 1763388:
         # if self.debug_ctr < 16510:
             # self._debug()
-            # self.debug_ctr += 1
+            self.debug_ctr += 1
             # if self.debug_ctr > 31422 and self.debug_ctr <= 43148:
             #     self.debug_set.add(f"{format(op, '02X')} - {opcode.mnemonic} - {opcode.cycles} - {opcode.alt_cycles}")
 
@@ -185,6 +189,7 @@ class Cpu:
         elif opcode.operation == Operation.PREFIX: return opcode.cycles + self._do_prefix()
         elif opcode.operation == Operation.PUSH: return self._do_push(opcode)
         elif opcode.operation == Operation.RET: return self._do_return(opcode)
+        elif opcode.operation == Operation.RETI: return self._do_return(opcode)
         elif opcode.operation == Operation.RLA: return self._do_rla(opcode)
         elif opcode.operation == Operation.RLCA: return self._do_rlca(opcode)
         elif opcode.operation == Operation.RRA: return self._do_rra(opcode)
@@ -434,6 +439,16 @@ class Cpu:
         if opcode.code == 0x09: self.hl.value = do_add(self.hl.value, self.bc.value)
         elif opcode.code == 0x19: self.hl.value = do_add(self.hl.value, self.de.value)
         elif opcode.code == 0x29: self.hl.value = do_add(self.hl.value, self.hl.value)
+        elif opcode.code == 0x39: self.hl.value = do_add(self.hl.value, self.stack_pointer)
+        elif opcode.code == 0xE8:
+            # 16 bit arithmetic but it doesn't follow the same flag conventions
+            offset = self._get_next_byte_signed()
+            val = self.stack_pointer + offset
+            self._update_zero_flag(False)
+            self._update_sub_flag(False)
+            self._update_carry_flag((self.stack_pointer & 0xFF) + (offset & 0xFF) > 0xFF)
+            self._update_half_carry_flag((self.stack_pointer & 0xF) + (offset & 0xF) > 0xF)
+            self.stack_pointer = val & 0xFFFF
         else: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return opcode.cycles
@@ -592,6 +607,22 @@ class Cpu:
             addr = self._get_next_word()
             self._push_word_to_stack(self.program_counter)
             self.program_counter = addr
+        elif opcode.code == 0xD4:
+            if not self._is_carry_flag_set():
+                addr = self._get_next_word()
+                self._push_word_to_stack(self.program_counter)
+                self.program_counter = addr
+            else:
+                self.program_counter += 2
+                cycles = opcode.alt_cycles
+        elif opcode.code == 0xDC:
+            if self._is_carry_flag_set():
+                addr = self._get_next_word()
+                self._push_word_to_stack(self.program_counter)
+                self.program_counter = addr
+            else:
+                self.program_counter += 2
+                cycles = opcode.alt_cycles
 
         else: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
@@ -869,6 +900,12 @@ class Cpu:
         elif opcode.code == 0xCA:
             self.program_counter = self._get_next_word() if self._is_zero_flag_set() else self.program_counter + 2
             cycles = opcode.alt_cycles if not self._is_zero_flag_set() else cycles
+        elif opcode.code == 0xD2:
+            self.program_counter = self._get_next_word() if not self._is_carry_flag_set() else self.program_counter + 2
+            cycles = opcode.alt_cycles if self._is_carry_flag_set() else cycles
+        elif opcode.code == 0xDA:
+            self.program_counter = self._get_next_word() if self._is_carry_flag_set() else self.program_counter + 2
+            cycles = opcode.alt_cycles if not self._is_carry_flag_set() else cycles
         elif opcode.code == 0xE9: self.program_counter = self.hl.value
         else: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
@@ -917,7 +954,10 @@ class Cpu:
         if opcode.code == 0x01: self.bc.value = self._get_next_word()
         elif opcode.code == 0x02: self._write_memory(self.bc.value, self.af.hi)
         elif opcode.code == 0x06: self.bc.hi = self._get_next_byte()
-        elif opcode.code == 0x08: self._write_memory(self._get_next_word(), self.stack_pointer)
+        elif opcode.code == 0x08:
+            addr = self._get_next_word()
+            self._write_memory(addr, self.stack_pointer & 0xFF)
+            self._write_memory(addr + 1, self.stack_pointer >> 8)
         elif opcode.code == 0x0A: self.af.hi = self._read_memory(self.bc.value)
         elif opcode.code == 0x0E: self.bc.lo = self._get_next_byte()
         elif opcode.code == 0x11: self.de.value = self._get_next_word()
@@ -1008,6 +1048,7 @@ class Cpu:
         elif opcode.code == 0x3E: self.af.hi = self._get_next_byte()
         elif opcode.code == 0xE2: self._write_memory(0xFF00 + self.bc.lo, self.af.hi)
         elif opcode.code == 0xEA: self._write_memory(self._get_next_word(), self.af.hi)
+        elif opcode.code == 0xF2: self.af.hi = self._read_memory(0xFF00 + self.bc.lo)
         elif opcode.code == 0xF8:
             offset = self._get_next_byte_signed()
             self.hl.value = self.stack_pointer + offset
@@ -1167,6 +1208,9 @@ class Cpu:
             self.program_counter = self._pop_word_from_stack() \
                 if self._is_carry_flag_set() else self.program_counter
             cycles = opcode.alt_cycles if not self._is_carry_flag_set() else cycles
+        elif opcode.code == 0xD9:
+            self.program_counter = self._pop_word_from_stack()
+            self._do_enable_interrupts = True
         else: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return cycles
@@ -1258,7 +1302,16 @@ class Cpu:
         self._push_word_to_stack(self.program_counter)
 
         # match opcode.code:
-        if opcode.code == 0xFF: self.program_counter = 0x38
+        if opcode.code == 0xC7: self.program_counter = 0x00
+        elif opcode.code == 0xCF: self.program_counter = 0x08
+        elif opcode.code == 0xD7: self.program_counter = 0x10
+        elif opcode.code == 0xDF: self.program_counter = 0x18
+        elif opcode.code == 0xE7: self.program_counter = 0x20
+        elif opcode.code == 0xEF: self.program_counter = 0x28
+        elif opcode.code == 0xF7: self.program_counter = 0x30
+        elif opcode.code == 0xFF: self.program_counter = 0x38
+        else: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
+
 
         return opcode.cycles
 

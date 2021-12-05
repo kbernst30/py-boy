@@ -411,7 +411,6 @@ class Ppu:
 
     def _render_background(self):
         # TODO deal with the Window
-        return
 
         current_scanline = self.get_current_scanline()
 
