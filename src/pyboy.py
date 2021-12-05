@@ -48,7 +48,7 @@ class PyBoy:
 
         self.rom.debug_header()
 
-        self.main_display.show()
+        # self.main_display.show()
 
         running = True
         while running:
@@ -64,7 +64,7 @@ class PyBoy:
                     # self.ppu.debug_vram(self.main_display)
 
                 # After execution of a frame, update the screen
-                self.main_display.render_screen()
+                # self.main_display.render_screen()
 
             except Exception as e:
                 logger.exception(e)
@@ -78,7 +78,7 @@ class PyBoy:
                     running = False
                     break
 
-            self.main_display.refresh()
+            # self.main_display.refresh()
 
         #     # Update screen
         #     # self._update_screen()
