@@ -1,7 +1,7 @@
 from constants import INTERRUPT_ENABLE_ADDR, INTERRUPT_FLAG_ADDR
 from cpu import Cpu
 from mmu import Mmu
-from utils import Interrupt, is_bit_set
+from utils import Interrupt, is_bit_set, set_bit
 
 
 class InterruptControl:
@@ -29,6 +29,15 @@ class InterruptControl:
                 # if the interrupt is requested and enabled, we can tell the CPU to handle it
                 if self.is_interrupt_enabled(interrupt) and self.is_interrupt_requested(interrupt):
                     self.cpu.service_interrupt(interrupt)
+
+    def request_interrupt(self, interrupt: Interrupt):
+        '''
+        Request a specific interrupt setting the value in the IF register
+        '''
+
+        interrupts_requested = self.mmu.read_byte(INTERRUPT_FLAG_ADDR)
+        interrupts_requested = set_bit(interrupts_requested, interrupt.value)
+        self.mmu.write_byte(INTERRUPT_FLAG_ADDR, interrupts_requested)
 
     def is_interrupt_master_enabled(self) -> bool:
         '''

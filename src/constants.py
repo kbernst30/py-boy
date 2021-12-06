@@ -5,7 +5,8 @@ SCREEN_HEIGHT = 144
 
 # Cycles per frame is determined by the clock frequency of the CPU (4.194304 MHz)
 # And the number of expected frames per second (~60) - to make this accurage it should be 59.7275
-MAX_CYCLES_PER_FRAME = math.floor(4194304 / 59.7275)
+CLOCK_SPEED = 4194304
+MAX_CYCLES_PER_FRAME = math.floor(CLOCK_SPEED / 59.7275)
 
 PROGRAM_COUNTER_INIT = 0x100
 STACK_POINTER_INIT = 0xFFFE
@@ -14,6 +15,8 @@ STACK_POINTER_INIT = 0xFFFE
 DIVIDER_REGISTER_ADDR = 0xFF04
 TIMER_ADDR = 0xFF05
 TIMER_MODULATOR_ADDR = 0xFF06  # The value at this address is what the timer is set to upon overflow
+TIMER_CONTROL_ADDR = 0xFF07
+CYCLES_PER_DIVIDER_INCREMENT = math.floor(16384 / 59.7275)  # The divider register increments at a rate of 16384Hz
 
 # LCD and Graphics
 LCD_CONTROL_ADDR = 0xFF40  # The address of the LCD control byte

@@ -154,12 +154,12 @@ class Cpu:
 
         # If in HALT mode, effectively stop the clock by not returning any cycles
         if self.halted:
-            return 0
+            return 4
 
         op = self._read_memory(self.program_counter)
         opcode = opcodes_map[op]
 
-        if self.debug_ctr < 6714723:
+        if self.debug_ctr < 161502:
         # if self.debug_ctr < 16510:
             # self._debug()
             self.debug_ctr += 1
@@ -451,10 +451,12 @@ class Cpu:
             return
 
         if self.last_opcode.operation == Operation.DI and self.will_disable_interrupts:
+            print("DISABLE")
             self.will_disable_interrupts = False
             self.interrupts_enabled = False
 
         elif self.last_opcode.operation == Operation.EI and self.will_enable_interrupts:
+            print("ENABLE")
             self.will_enable_interrupts = False
             self.interrupts_enabled = True
 
@@ -890,13 +892,13 @@ class Cpu:
     def _do_halt(self, opcode: OpCode) -> int:
         '''
         Enter HALT mode if interrupts are enabled, otherwise skip the program counter forward
-        over the next instruction
+        over the next instruction - TODO that failed tests, just do HALT for now
         '''
 
         if self.interrupts_enabled:
             self.halted = True
-        else:
-            self.program_counter += 1
+        # else:
+        #     self.program_counter += 1
 
         return opcode.cycles
 
@@ -1290,7 +1292,8 @@ class Cpu:
             cycles = opcode.alt_cycles if not self._is_carry_flag_set() else cycles
         elif opcode.code == 0xD9:
             self.program_counter = self._pop_word_from_stack()
-            self.will_disable_interrupts = True
+            # self.will_enable_interrupts = True
+            self.interrupts_enabled = True
         else: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return cycles

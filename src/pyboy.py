@@ -12,6 +12,7 @@ from interrupts import InterruptControl
 from mmu import Mmu
 from ppu import Ppu
 from rom import Rom
+from timers import TimerControl
 
 
 logger = logging.getLogger(__name__)
@@ -27,8 +28,9 @@ class PyBoy:
         self.cpu = Cpu(self.mmu)
         self.ppu = Ppu(self.mmu)
         self.interrupts = InterruptControl(self.mmu, self.cpu)
+        self.timers = TimerControl(self.mmu, self.interrupts)
 
-        self.main_display = MainDisplay(self.ppu)
+        # self.main_display = MainDisplay(self.ppu)
 
         self.rom = None
 
@@ -60,11 +62,12 @@ class PyBoy:
                     cycles = self.cpu.execute()
                     frame_cycles += cycles
 
-                    self.ppu.update_graphics(cycles)
+                    self.timers.update_timers(cycles)
+                    # self.ppu.update_graphics(cycles)
                     self.interrupts.service_interrupts()
 
                 # After execution of a frame, update the screen
-                self.main_display.render_screen()
+                # self.main_display.render_screen()
 
             except Exception as e:
                 logger.exception(e)

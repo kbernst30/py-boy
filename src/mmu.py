@@ -1,6 +1,6 @@
 import logging
 
-from constants import CURRENT_SCANLINE_ADDR, DIVIDER_REGISTER_ADDR, MAXIMUM_RAM_BANKS, RAM_BANK_SIZE
+from constants import CURRENT_SCANLINE_ADDR, DIVIDER_REGISTER_ADDR, MAXIMUM_RAM_BANKS, RAM_BANK_SIZE, TIMER_ADDR
 
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ class Mmu:
         self.memory[0xFFFF] = 0x00
 
         # TEMP
-        # self.memory[0xFF44] = 0x90
+        self.memory[0xFF44] = 0x90
 
     def read_byte(self, addr: int) -> int:
         '''
@@ -194,6 +194,20 @@ class Mmu:
         '''
 
         self.vram_access = True
+
+    def increment_divider_register(self):
+        '''
+        Increment the value in the divider register, properly overflowing
+        '''
+
+        self.memory[DIVIDER_REGISTER_ADDR] = (self.memory[DIVIDER_REGISTER_ADDR] + 1) & 0xFF
+
+    def increment_timer_register(self):
+        '''
+        Increment the timer register, properly overflowing
+        '''
+
+        self.memory[TIMER_ADDR] = (self.memory[TIMER_ADDR] + 1) & 0xFF
 
     def _handle_banking(self, addr: int, data: int):
         '''
