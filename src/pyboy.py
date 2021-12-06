@@ -8,6 +8,7 @@ from constants import MAX_CYCLES_PER_FRAME
 
 from cpu import Cpu
 from display import MainDisplay
+from interrupts import InterruptControl
 from mmu import Mmu
 from ppu import Ppu
 from rom import Rom
@@ -25,6 +26,7 @@ class PyBoy:
         self.mmu = Mmu()
         self.cpu = Cpu(self.mmu)
         self.ppu = Ppu(self.mmu)
+        self.interrupts = InterruptControl(self.mmu, self.cpu)
 
         self.main_display = MainDisplay(self.ppu)
 
@@ -59,6 +61,7 @@ class PyBoy:
                     frame_cycles += cycles
 
                     self.ppu.update_graphics(cycles)
+                    self.interrupts.service_interrupts()
 
                 # After execution of a frame, update the screen
                 self.main_display.render_screen()

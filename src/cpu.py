@@ -2,11 +2,11 @@ import logging
 
 from enum import Enum
 
-from constants import PROGRAM_COUNTER_INIT, STACK_POINTER_INIT
+from constants import INTERRUPT_FLAG_ADDR, PROGRAM_COUNTER_INIT, STACK_POINTER_INIT
 
 from ops import OpCode, Operation, opcodes_map, prefix_opcodes_map
 from mmu import Mmu
-from utils import bit_negate, get_bit_val, is_bit_set, reset_bit, set_bit
+from utils import Interrupt, bit_negate, get_bit_val, is_bit_set, reset_bit, set_bit
 
 
 logger = logging.getLogger(__name__)
@@ -114,11 +114,18 @@ class Cpu:
         # Interrupts
         self.interrupts_enabled = True
 
+        # Interrupt enabling/disable is delayed by one instruction
+        # so have flags to denote if we SHOULD change the value
+        self.will_enable_interrupts = False
+        self.will_disable_interrupts = False
+
         # For HALT mode - will be disabled when an interrupt occurs
         self.halted = False
 
         self.debug_ctr = 0
         self.debug_set = set()
+
+        self.last_opcode = None
 
     def reset(self):
         '''
@@ -132,6 +139,11 @@ class Cpu:
         self.bc.value = 0x0013
         self.de.value = 0x00D8
         self.hl.value = 0x014D
+
+        self.halted = False
+        self.will_enable_interrupts = False
+        self.will_disable_interrupts = False
+        self.interrupts_enabled = True
 
     def execute(self) -> int:
         '''
@@ -162,45 +174,96 @@ class Cpu:
         # self.debug_set.add(f"{format(op, '02X')} - {opcode.mnemonic} - {opcode.cycles} - {opcode.alt_cycles}")
         self.program_counter += 1
 
+        cycles = 0
+
         # match opcode.operation:
-        if opcode.operation == Operation.ADC: return self._do_add_8_bit(opcode, with_carry=True)
-        elif opcode.operation == Operation.ADD: return self._do_add_8_bit(opcode)
-        elif opcode.operation == Operation.ADD_16_BIT: return self._do_add_16_bit(opcode)
-        elif opcode.operation == Operation.AND: return self._do_and(opcode)
-        elif opcode.operation == Operation.CALL: return self._do_call(opcode)
-        elif opcode.operation == Operation.CCF: return self._do_complement_carry(opcode)
-        elif opcode.operation == Operation.CP: return self._do_compare(opcode)
-        elif opcode.operation == Operation.CPL: return self._do_complement(opcode)
-        elif opcode.operation == Operation.DAA: return self._do_daa(opcode)
-        elif opcode.operation == Operation.DEC: return self._do_decrement_8_bit(opcode)
-        elif opcode.operation == Operation.DEC_16_BIT: return self._do_decrement_16_bit(opcode)
-        elif opcode.operation == Operation.DI: return self._do_disable_interrupts(opcode)
-        elif opcode.operation == Operation.EI: return self._do_enable_interrupts(opcode)
-        elif opcode.operation == Operation.HALT: return self._do_halt(opcode)
-        elif opcode.operation == Operation.INC: return self._do_increment_8_bit(opcode)
-        elif opcode.operation == Operation.INC_16_BIT: return self._do_increment_16_bit(opcode)
-        elif opcode.operation == Operation.JP: return self._do_jump(opcode)
-        elif opcode.operation == Operation.JR: return self._do_jump_relative(opcode)
-        elif opcode.operation == Operation.LD: return self._do_load(opcode)
-        elif opcode.operation == Operation.LDH: return self._do_load_h(opcode)
-        elif opcode.operation == Operation.NOP: return opcode.cycles
-        elif opcode.operation == Operation.OR: return self._do_or(opcode)
-        elif opcode.operation == Operation.POP: return self._do_pop(opcode)
-        elif opcode.operation == Operation.PREFIX: return opcode.cycles + self._do_prefix()
-        elif opcode.operation == Operation.PUSH: return self._do_push(opcode)
-        elif opcode.operation == Operation.RET: return self._do_return(opcode)
-        elif opcode.operation == Operation.RETI: return self._do_return(opcode)
-        elif opcode.operation == Operation.RLA: return self._do_rla(opcode)
-        elif opcode.operation == Operation.RLCA: return self._do_rlca(opcode)
-        elif opcode.operation == Operation.RRA: return self._do_rra(opcode)
-        elif opcode.operation == Operation.RRCA: return self._do_rrca(opcode)
-        elif opcode.operation == Operation.RST: return self._do_restart(opcode)
-        elif opcode.operation == Operation.SBC: return self._do_sub_8_bit(opcode, with_carry=True)
-        elif opcode.operation == Operation.SCF: return self._do_set_carry_flag(opcode)
-        elif opcode.operation == Operation.STOP: return opcode.cycles  # TODO implement STOP
-        elif opcode.operation == Operation.SUB: return self._do_sub_8_bit(opcode)
-        elif opcode.operation == Operation.XOR: return self._do_xor(opcode)
+        if opcode.operation == Operation.ADC: cycles = self._do_add_8_bit(opcode, with_carry=True)
+        elif opcode.operation == Operation.ADD: cycles = self._do_add_8_bit(opcode)
+        elif opcode.operation == Operation.ADD_16_BIT: cycles = self._do_add_16_bit(opcode)
+        elif opcode.operation == Operation.AND: cycles = self._do_and(opcode)
+        elif opcode.operation == Operation.CALL: cycles = self._do_call(opcode)
+        elif opcode.operation == Operation.CCF: cycles = self._do_complement_carry(opcode)
+        elif opcode.operation == Operation.CP: cycles = self._do_compare(opcode)
+        elif opcode.operation == Operation.CPL: cycles = self._do_complement(opcode)
+        elif opcode.operation == Operation.DAA: cycles = self._do_daa(opcode)
+        elif opcode.operation == Operation.DEC: cycles = self._do_decrement_8_bit(opcode)
+        elif opcode.operation == Operation.DEC_16_BIT: cycles = self._do_decrement_16_bit(opcode)
+        elif opcode.operation == Operation.DI: cycles = self._do_disable_interrupts(opcode)
+        elif opcode.operation == Operation.EI: cycles = self._do_enable_interrupts(opcode)
+        elif opcode.operation == Operation.HALT: cycles = self._do_halt(opcode)
+        elif opcode.operation == Operation.INC: cycles = self._do_increment_8_bit(opcode)
+        elif opcode.operation == Operation.INC_16_BIT: cycles = self._do_increment_16_bit(opcode)
+        elif opcode.operation == Operation.JP: cycles = self._do_jump(opcode)
+        elif opcode.operation == Operation.JR: cycles = self._do_jump_relative(opcode)
+        elif opcode.operation == Operation.LD: cycles = self._do_load(opcode)
+        elif opcode.operation == Operation.LDH: cycles = self._do_load_h(opcode)
+        elif opcode.operation == Operation.NOP: cycles = opcode.cycles
+        elif opcode.operation == Operation.OR: cycles = self._do_or(opcode)
+        elif opcode.operation == Operation.POP: cycles = self._do_pop(opcode)
+        elif opcode.operation == Operation.PREFIX: cycles = opcode.cycles + self._do_prefix()
+        elif opcode.operation == Operation.PUSH: cycles = self._do_push(opcode)
+        elif opcode.operation == Operation.RET: cycles = self._do_return(opcode)
+        elif opcode.operation == Operation.RETI: cycles = self._do_return(opcode)
+        elif opcode.operation == Operation.RLA: cycles = self._do_rla(opcode)
+        elif opcode.operation == Operation.RLCA: cycles = self._do_rlca(opcode)
+        elif opcode.operation == Operation.RRA: cycles = self._do_rra(opcode)
+        elif opcode.operation == Operation.RRCA: cycles = self._do_rrca(opcode)
+        elif opcode.operation == Operation.RST: cycles = self._do_restart(opcode)
+        elif opcode.operation == Operation.SBC: cycles = self._do_sub_8_bit(opcode, with_carry=True)
+        elif opcode.operation == Operation.SCF: cycles = self._do_set_carry_flag(opcode)
+        elif opcode.operation == Operation.STOP: cycles = opcode.cycles  # TODO implement STOP
+        elif opcode.operation == Operation.SUB: cycles = self._do_sub_8_bit(opcode)
+        elif opcode.operation == Operation.XOR: cycles = self._do_xor(opcode)
         else: raise Exception(f"Unknown operation encountered 0x{format(op, '02x')} - {opcode.mnemonic}")
+
+        # Deal with interrupt enabling/disabling
+        self._toggle_interrupts_enabled()
+        self.last_opcode = opcode
+
+        return cycles
+
+    def is_interrupts_enabled(self) -> bool:
+        '''
+        Return whether or not the master interrupt switch is enabled
+        '''
+
+        return self.interrupts_enabled
+
+    def service_interrupt(self, interrupt: Interrupt):
+        '''
+        Service a requested interrupt
+        '''
+
+        # If interrupt is being serviced, unhalt the CPU
+        self.halted = False
+
+        # Disable any additional interrupts for now
+        self.interrupts_enabled = False
+
+        # Turn off the request for the requested interrupt
+        interrupts_requested = self._read_memory(INTERRUPT_FLAG_ADDR)
+        interrupts_requested = reset_bit(interrupts_requested, interrupt.value)
+        self._write_memory(INTERRUPT_FLAG_ADDR, interrupts_requested)
+
+        # Push current PC to the stack
+        self._push_word_to_stack(self.program_counter)
+
+        # Service the Interrupt based on value
+        # VBlank Interrupt - INT $40
+        # LCD Stat Interrupt - INT $48
+        # Timer Interrupt - INT $50
+        # Serial Interrupt - INT $58
+        # Joypad Interrupt - INT $60
+        if interrupt == Interrupt.V_BLANK:
+            self.program_counter = 0x40
+        elif interrupt == Interrupt.LCD_STAT:
+            self.program_counter = 0x48
+        elif interrupt == Interrupt.TIMER:
+            self.program_counter = 0x50
+        elif interrupt == Interrupt.SERIAL:
+            self.program_counter = 0x58
+        elif interrupt == Interrupt.JOYPAD:
+            self.program_counter = 0x60
 
     def _read_memory(self, addr: int) -> int:
         '''
@@ -378,6 +441,22 @@ class Cpu:
         lo = self._pop_byte_from_stack()
         hi = self._pop_byte_from_stack()
         return ((hi << 8) | lo) & 0xFFFF
+
+    def _toggle_interrupts_enabled(self):
+        '''
+        Enable or disable interrupts if that was previously requested as part of a DI or EI instruction
+        '''
+
+        if self.last_opcode is None:
+            return
+
+        if self.last_opcode.operation == Operation.DI and self.will_disable_interrupts:
+            self.will_disable_interrupts = False
+            self.interrupts_enabled = False
+
+        elif self.last_opcode.operation == Operation.EI and self.will_enable_interrupts:
+            self.will_enable_interrupts = False
+            self.interrupts_enabled = True
 
     def _do_add_8_bit(self, opcode: OpCode, with_carry=False) -> int:
         '''
@@ -795,7 +874,7 @@ class Cpu:
         :return the number of cycles needed to execute this operation
         '''
 
-        self.interrupts_enabled = False
+        self.will_enable_interrupts = False
         return opcode.cycles
 
     def _do_enable_interrupts(self, opcode: OpCode) -> int:
@@ -805,7 +884,7 @@ class Cpu:
         :return the number of cycles needed to execute this operation
         '''
 
-        self.interrupts_enabled = True
+        self.will_enable_interrupts = True
         return opcode.cycles
 
     def _do_halt(self, opcode: OpCode) -> int:
@@ -1211,7 +1290,7 @@ class Cpu:
             cycles = opcode.alt_cycles if not self._is_carry_flag_set() else cycles
         elif opcode.code == 0xD9:
             self.program_counter = self._pop_word_from_stack()
-            self._do_enable_interrupts = True
+            self.will_disable_interrupts = True
         else: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return cycles

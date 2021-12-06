@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import Enum, IntEnum
 
 
 class LcdMode(Enum):
@@ -6,6 +6,14 @@ class LcdMode(Enum):
     V_BLANK = 1
     SPRITE_SEARCH = 2
     LCD_TRANSFER = 3
+
+
+class Interrupt(IntEnum):
+    V_BLANK = 0
+    LCD_STAT = 1
+    TIMER = 2
+    SERIAL = 3
+    JOYPAD = 4
 
 
 def is_bit_set(data: int, position: int) -> bool:
@@ -24,8 +32,10 @@ def reset_bit(data: int, position: int) -> int:
 
 def get_bit_val(data: int, position: int) -> int:
     # match data & (1 << position) > 0:
-    if data & (1 << position) > 0: return 1
-    else: return 0
+    if data & (1 << position) > 0:
+        return 1
+    else:
+        return 0
 
 
 def bit_negate(data: int, bits=8) -> int:

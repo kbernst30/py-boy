@@ -52,9 +52,19 @@ GB_COLORS = {
     3: 0x000000
 }
 
-# GB_COLORS = {
-#     3: 0xFFFFFF,
-#     2: 0xCCCCCC,
-#     1: 0x777777,
-#     0: 0x000000
-# }
+# Interrupts
+# Known as IE (Interrupt Enable) register, which denotes which interrupts are currently enabled
+# Bit 0 = VBlank Interrupt - INT $40
+# Bit 1 = LCD Stat Interrupt - INT $48
+# Bit 2 = Timer Interrupt - INT $50
+# Bit 3 = Serial Interrupt - INT $58
+# Bit 4 = Joypad Interrupt - INT $60
+INTERRUPT_ENABLE_ADDR = 0xFFFF
+
+# Known as IF (Interrupt Flag) register, which denotes which interrupts are currently requested
+# Bit 0 = VBlank Interrupt - INT $40
+# Bit 1 = LCD Stat Interrupt - INT $48
+# Bit 2 = Timer Interrupt - INT $50
+# Bit 3 = Serial Interrupt - INT $58
+# Bit 4 = Joypad Interrupt - INT $60
+INTERRUPT_FLAG_ADDR = 0xFF0F
