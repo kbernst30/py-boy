@@ -147,9 +147,9 @@ class Cpu:
         op = self._read_memory(self.program_counter)
         opcode = opcodes_map[op]
 
-        if self.debug_ctr < 1763388:
+        if self.debug_ctr < 4420382:
         # if self.debug_ctr < 16510:
-            # self._debug()
+            self._debug()
             self.debug_ctr += 1
             # if self.debug_ctr > 31422 and self.debug_ctr <= 43148:
             #     self.debug_set.add(f"{format(op, '02X')} - {opcode.mnemonic} - {opcode.cycles} - {opcode.alt_cycles}")
