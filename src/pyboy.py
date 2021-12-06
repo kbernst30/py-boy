@@ -26,7 +26,7 @@ class PyBoy:
         self.cpu = Cpu(self.mmu)
         self.ppu = Ppu(self.mmu)
 
-        # self.main_display = MainDisplay(self.ppu)
+        self.main_display = MainDisplay(self.ppu)
 
         self.rom = None
 
@@ -58,10 +58,10 @@ class PyBoy:
                     cycles = self.cpu.execute()
                     frame_cycles += cycles
 
-                    # self.ppu.update_graphics(cycles)
+                    self.ppu.update_graphics(cycles)
 
                 # After execution of a frame, update the screen
-                # self.main_display.render_screen()
+                self.main_display.render_screen()
 
             except Exception as e:
                 logger.exception(e)
