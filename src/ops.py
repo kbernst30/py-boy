@@ -310,7 +310,7 @@ opcodes = [
     OpCode(0xE5, "PUSH HL", Operation.PUSH, 1, 16),
     OpCode(0xE6, "AND d8", Operation.AND, 2, 8),
     OpCode(0xE7, "RST 20H", Operation.RST, 1, 16),
-    OpCode(0xE8, "ADD SP, r8", Operation.ADD, 2, 16),
+    OpCode(0xE8, "ADD SP, r8", Operation.ADD_16_BIT, 2, 16),
     OpCode(0xE9, "JP HL", Operation.JP, 1, 4),
     OpCode(0xEA, "LD (a16), A", Operation.LD, 3, 16),
     # OpCode(0xEB, Operation.PREFIX, 1, 4),

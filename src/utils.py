@@ -23,9 +23,9 @@ def reset_bit(data: int, position: int) -> int:
 
 
 def get_bit_val(data: int, position: int) -> int:
-    match data & (1 << position) > 0:
-        case True: return 1
-        case False: return 0
+    # match data & (1 << position) > 0:
+    if data & (1 << position) > 0: return 1
+    else: return 0
 
 
 def bit_negate(data: int, bits=8) -> int:

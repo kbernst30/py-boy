@@ -105,11 +105,11 @@ class LcdStatus:
         lsb = get_bit_val(self.memory.read_byte(LCD_STATUS_ADDR), 0)
         lcd_mode = msb << 1 | lsb
 
-        match lcd_mode:
-            case 0: return LcdMode.H_BLANK,
-            case 1: return LcdMode.V_BLANK,
-            case 2: return LcdMode.SPRITE_SEARCH,
-            case 3: return LcdMode.LCD_TRANSFER
+        # match lcd_mode:
+        if lcd_mode == 0: return LcdMode.H_BLANK,
+        elif lcd_mode == 1: return LcdMode.V_BLANK,
+        elif lcd_mode == 2: return LcdMode.SPRITE_SEARCH,
+        elif lcd_mode == 3: return LcdMode.LCD_TRANSFER
 
     def set_mode(self, mode: LcdMode):
         '''
@@ -137,7 +137,7 @@ class Ppu:
 
         self.debug = True
 
-    def get_screen(self) -> list[list[int]]:
+    def get_screen(self) -> "list[list[int]]":
         return self.screen
 
     def get_current_scanline(self) -> int:
@@ -309,7 +309,7 @@ class Ppu:
 
         return tiles
 
-    def get_background_tile_pixels(self, y: int) -> list[int]:
+    def get_background_tile_pixels(self, y: int) -> "list[int]":
         '''
         Generate a line of pixels in a tile for a line at y position on screen
         '''
@@ -333,7 +333,7 @@ class Ppu:
     def is_background_enabled(self) -> bool:
         return self.lcd_control.is_background_enabled()
 
-    def get_background_tile_map(self) -> list[int]:
+    def get_background_tile_map(self) -> "list[int]":
         '''
         Get the current background tile map to be able to determine
         which tiles to draw to the screen. Tile map can be at one of two addresses
@@ -400,12 +400,12 @@ class Ppu:
         # Bit 5-4 - Color for index 2
         # Bit 3-2 - Color for index 1
         # Bit 1-0 - Color for index 0
-        match color_id:
-            case 3: color = get_bit_val(pallette, 7) << 1 | get_bit_val(pallette, 6)
-            case 2: color = get_bit_val(pallette, 5) << 1 | get_bit_val(pallette, 4)
-            case 1: color = get_bit_val(pallette, 3) << 1 | get_bit_val(pallette, 2)
-            case 0: color = get_bit_val(pallette, 1) << 1 | get_bit_val(pallette, 0)
-            case _: raise Exception(f"Invalid color_id - {color_id}")
+        # match color_id:
+        if color_id == 3: color = get_bit_val(pallette, 7) << 1 | get_bit_val(pallette, 6)
+        elif color_id == 2: color = get_bit_val(pallette, 5) << 1 | get_bit_val(pallette, 4)
+        elif color_id == 1: color = get_bit_val(pallette, 3) << 1 | get_bit_val(pallette, 2)
+        elif color_id == 0: color = get_bit_val(pallette, 1) << 1 | get_bit_val(pallette, 0)
+        else: raise Exception(f"Invalid color_id - {color_id}")
 
         return GB_COLORS[color]
 

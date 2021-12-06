@@ -5,10 +5,11 @@ description = ""
 authors = ["Kyle Bernstein <kbernst30@gmail.com>"]
 
 [tool.poetry.dependencies]
-python = "^3.10"
-pygame = "^2.1.0"
+python = "^3.8"
 PySDL2 = "^0.9.9"
 pysdl2-dll = "^2.0.16"
+vmprof = "^0.4.15"
+pygame = "^2.1.0"
 
 [tool.poetry.dev-dependencies]
 flake8 = "^4.0.1"
