@@ -189,7 +189,7 @@ opcodes = [
     OpCode(0x73, "LD (HL), E", Operation.LD, 1, 8),
     OpCode(0x74, "LD (HL), H", Operation.LD, 1, 8),
     OpCode(0x75, "LD (HL), L", Operation.LD, 1, 8),
-    OpCode(0x76, "HALT", Operation.HALT, 1, 4),
+    OpCode(0x76, "HALT", Operation.HALT, 1, 0),
     OpCode(0x77, "LD (HL), A", Operation.LD, 1, 8),
     OpCode(0x78, "LD A, B", Operation.LD, 1, 4),
     OpCode(0x79, "LD A, C", Operation.LD, 1, 4),
@@ -279,7 +279,7 @@ opcodes = [
     OpCode(0xC8, "RET Z", Operation.RET, 1, 20, 8),
     OpCode(0xC9, "RET", Operation.RET, 1, 16),
     OpCode(0xCA, "JP Z a16", Operation.JP, 3, 16, 12),
-    OpCode(0xCB, "PREFIX", Operation.PREFIX, 1, 4),
+    OpCode(0xCB, "PREFIX", Operation.PREFIX, 1, 0),
     OpCode(0xCC, "CALL Z, a16", Operation.CALL, 3, 24, 12),
     OpCode(0xCD, "CALL a16", Operation.CALL, 3, 24),
     OpCode(0xCE, "ADC A, d8", Operation.ADC, 2, 8),
@@ -613,3 +613,27 @@ prefix_opcodes = [
 
 opcodes_map = {opcode.code: opcode for opcode in opcodes}
 prefix_opcodes_map = {opcode.code: opcode for opcode in prefix_opcodes}
+
+
+def debug_ops():
+    for i in range(0x10):
+        for j in range(0x10):
+            code = i << 4 | j
+            if code in opcodes_map:
+                print(f'{int(opcodes_map[code].alt_cycles/4)}', end=",")
+            else:
+                print(0, end=",")
+
+        print("")
+
+    print("")
+
+    for i in range(0x10):
+        for j in range(0x10):
+            code = i << 4 | j
+            if code in prefix_opcodes_map:
+                print(f'{int(prefix_opcodes_map[code].alt_cycles/4)}', end=",")
+            else:
+                print(0, end=",")
+
+        print("")

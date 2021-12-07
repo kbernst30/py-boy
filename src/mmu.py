@@ -1,6 +1,6 @@
 import logging
 
-from constants import CURRENT_SCANLINE_ADDR, DIVIDER_REGISTER_ADDR, MAXIMUM_RAM_BANKS, RAM_BANK_SIZE, TIMER_ADDR
+from constants import CURRENT_SCANLINE_ADDR, DIVIDER_REGISTER_ADDR, MAXIMUM_RAM_BANKS, RAM_BANK_SIZE, TIMER_ADDR, TIMER_CONTROL_ADDR
 from rom import Rom
 
 
@@ -53,6 +53,8 @@ class Mmu:
         self.reset()
 
         self.rom = None
+
+        self.timer_frequency_changed = False
 
     def reset(self):
         '''
@@ -151,6 +153,12 @@ class Mmu:
             # We cannot write here directly - reset to 0
             self.memory[addr] = 0
 
+        elif addr == TIMER_CONTROL_ADDR:
+            # If we are changing the data of the timer controller, then the timer itself will need
+            # to reset to count at the new frequency being set here
+            self.update_timer_frequency_changed(True)
+            self.memory[addr] = data
+
         else:
             self.memory[addr] = data & 0xFF
 
@@ -174,6 +182,20 @@ class Mmu:
             self.mbc2 = True
 
         self.number_of_rom_banks = rom.get_number_of_banks()
+
+    def update_timer_frequency_changed(self, val: bool):
+        '''
+        Denote if the timer frequency has changed and we need to respond
+        '''
+
+        self.timer_frequency_changed = val
+
+    def is_timer_frequency_changed(self) -> bool:
+        '''
+        Return whether or not the timer frequency has been changed
+        '''
+
+        return self.timer_frequency_changed
 
     def update_scanline(self):
         '''
@@ -271,10 +293,15 @@ class Mmu:
                 if new_rom_bank > self.number_of_rom_banks:
                     # If we request a bank greater than what the ROM has, we need to mask
                     # TODO see pandocs for details
-                    pass
+                    print("BANK")
 
-                self.rom_bank = new_rom_bank
+                # Preserve the high bits and set the lower 5 bits
+                self.rom_bank = (self.rom_bank & 0b11100000) | new_rom_bank
 
         elif addr >= 0x4000 and addr < 0x6000:
             # TODO deal with other bits for MBC 1
             print("HI BITS")
+
+        elif addr >= 0x6000 and addr < 0x8000:
+            # TODO deal with MBC 1 Banking mode
+            print("BANK MODE")

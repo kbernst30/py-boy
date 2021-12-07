@@ -16,7 +16,7 @@ DIVIDER_REGISTER_ADDR = 0xFF04
 TIMER_ADDR = 0xFF05
 TIMER_MODULATOR_ADDR = 0xFF06  # The value at this address is what the timer is set to upon overflow
 TIMER_CONTROL_ADDR = 0xFF07
-CYCLES_PER_DIVIDER_INCREMENT = math.floor(16384 / 59.7275)  # The divider register increments at a rate of 16384Hz
+CYCLES_PER_DIVIDER_INCREMENT = 256
 
 # LCD and Graphics
 LCD_CONTROL_ADDR = 0xFF40  # The address of the LCD control byte

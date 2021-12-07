@@ -64,6 +64,7 @@ class PyBoy:
 
                     self.timers.update_timers(cycles)
                     self.ppu.update_graphics(cycles)
+
                     self.interrupts.service_interrupts()
 
                 # After execution of a frame, update the screen

@@ -127,6 +127,8 @@ class Cpu:
 
         self.last_opcode = None
 
+        self.is_debugging = False
+
     def reset(self):
         '''
         Reset the CPU and all registers to appropriate values
@@ -163,9 +165,15 @@ class Cpu:
         if self.halted:
             return 4
 
-        self.program_counter += 1
+        self.program_counter = (self.program_counter + 1) & 0xFFFF
 
         cycles = 0
+
+        # if opcode.code == 0xAF and self.last_opcode.code == 0xF5:
+        #     self.is_debugging = True
+
+        # if self.is_debugging:
+        #     breakpoint()
 
         # match opcode.operation:
         if opcode.operation == Operation.ADC: cycles = self._do_add_8_bit(opcode, with_carry=True)
@@ -191,7 +199,7 @@ class Cpu:
         elif opcode.operation == Operation.NOP: cycles = opcode.cycles
         elif opcode.operation == Operation.OR: cycles = self._do_or(opcode)
         elif opcode.operation == Operation.POP: cycles = self._do_pop(opcode)
-        elif opcode.operation == Operation.PREFIX: cycles = opcode.cycles + self._do_prefix()
+        elif opcode.operation == Operation.PREFIX: cycles = self._do_prefix()
         elif opcode.operation == Operation.PUSH: cycles = self._do_push(opcode)
         elif opcode.operation == Operation.RET: cycles = self._do_return(opcode)
         elif opcode.operation == Operation.RETI: cycles = self._do_return(opcode)
@@ -220,9 +228,9 @@ class Cpu:
 
         return self.interrupts_enabled
 
-    def service_interrupt(self, interrupt: Interrupt):
+    def service_interrupt(self, interrupt: Interrupt) -> int:
         '''
-        Service a requested interrupt
+        Service a requested interrupt - return the number of cycles necessary to do this
         '''
 
         # If interrupt is being serviced, unhalt the CPU
@@ -258,6 +266,10 @@ class Cpu:
                 self.program_counter = 0x58
             elif interrupt == Interrupt.JOYPAD:
                 self.program_counter = 0x60
+
+            return 20
+
+        return 0
 
     def _read_memory(self, addr: int) -> int:
         '''
@@ -1245,10 +1257,14 @@ class Cpu:
         '''
 
         # match opcode.code:
-        if opcode.code == 0xC5: self._push_word_to_stack(self.bc.value)
-        elif opcode.code == 0xD5: self._push_word_to_stack(self.de.value)
-        elif opcode.code == 0xE5: self._push_word_to_stack(self.hl.value)
-        elif opcode.code == 0xF5: self._push_word_to_stack(self.af.value)
+        if opcode.code == 0xC5:
+            self._push_word_to_stack(self.bc.value)
+        elif opcode.code == 0xD5:
+            self._push_word_to_stack(self.de.value)
+        elif opcode.code == 0xE5:
+            self._push_word_to_stack(self.hl.value)
+        elif opcode.code == 0xF5:
+            self._push_word_to_stack(self.af.value)
         else: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return opcode.cycles

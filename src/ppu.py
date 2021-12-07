@@ -3,6 +3,7 @@ from constants import (
     BACKGROUND_SCROLL_Y,
     COLOR_PALLETTE_ADDR,
     CURRENT_SCANLINE_ADDR,
+    CURRENT_SCANLINE_COMPARE_ADDR,
     CYCLES_PER_SCANLINE,
     GB_COLORS,
     LCD_CONTROL_ADDR,
@@ -14,7 +15,7 @@ from constants import (
 )
 from interrupts import InterruptControl
 from mmu import Mmu
-from utils import Interrupt, get_bit_val, is_bit_set, LcdMode
+from utils import Interrupt, get_bit_val, is_bit_set, LcdMode, reset_bit, set_bit
 
 
 class LcdControl:
@@ -126,6 +127,40 @@ class LcdStatus:
         current_status |= val
         self.set_status(current_status)
 
+    def is_hblank_stat_interrupt_enabled(self):
+        '''
+        Return whether or not a STAT interrupt should occur during HBlank
+        '''
+
+        return is_bit_set(self.memory.read_byte(LCD_STATUS_ADDR), 3)
+
+    def is_vblank_stat_interrupt_enabled(self):
+        '''
+        Return whether or not a STAT interrupt should occur during VBlank
+        '''
+
+        return is_bit_set(self.memory.read_byte(LCD_STATUS_ADDR), 4)
+
+    def is_oam_stat_interrupt_enabled(self):
+        '''
+        Return whether or not a STAT interrupt should occur during OAM search
+        '''
+
+        return is_bit_set(self.memory.read_byte(LCD_STATUS_ADDR), 5)
+
+    def update_coincidence_flag(self, val: bool):
+        '''
+        Update the coincidence flag (Bit 2) based on value
+        '''
+
+        status = self.get_status()
+        if val:
+            status = set_bit(status, 2)
+        else:
+            status = reset_bit(status, 2)
+
+        self.set_status(status)
+
 
 class Ppu:
 
@@ -192,20 +227,24 @@ class Ppu:
         '''
 
         scanline = self.memory.read_byte(CURRENT_SCANLINE_ADDR)
+        scanline_compare = self.memory.read_byte(CURRENT_SCANLINE_COMPARE_ADDR)
 
         # TODO do i need this??
-        # if not self.lcd_control.is_lcd_enabled():
-        #     # LCD is disabled, this means we are in VBlank, so reset scanline
-        #     self.scanline_counter = CYCLES_PER_SCANLINE
-        #     self.memory.reset_scanline()
+        if not self.lcd_control.is_lcd_enabled():
+            # LCD is disabled, this means we are in VBlank, so reset scanline
+            self.scanline_counter = CYCLES_PER_SCANLINE
+            self.memory.reset_scanline()
 
-        #     # Set VBlank mode to LCD Status
-        #     self.lcd_status.set_mode(LcdMode.V_BLANK)
+            # Set VBlank mode to LCD Status
+            self.lcd_status.set_mode(LcdMode.V_BLANK)
 
-        #     self.memory.open_oam_access()
-        #     self.memory.open_vram_access()
+            self.memory.open_oam_access()
+            self.memory.open_vram_access()
 
-        #     return
+            return
+
+        should_request_stat_interrupt = False
+        current_mode = self.lcd_status.get_mode()
 
         # If LCD is enabled, we should cycle through different LCD modes depending on what
         # "dot" we are drawing in the current scanline. We have 456 cycles per scanline
@@ -221,7 +260,7 @@ class Ppu:
             self.memory.open_oam_access()
             self.memory.open_vram_access()
 
-            # TODO SHould request interrupt if enabled
+            should_request_stat_interrupt = self.lcd_status.is_vblank_stat_interrupt_enabled()
 
         else:
             if self.scanline_counter >= MAX_CYCLES_PER_FRAME - 80:
@@ -232,7 +271,7 @@ class Ppu:
                 self.memory.restrict_oam_access()
                 self.memory.open_vram_access()
 
-                # TODO SHould request interrupt if enabled
+                should_request_stat_interrupt = self.lcd_status.is_oam_stat_interrupt_enabled()
 
             elif self.scanline_counter >= MAX_CYCLES_PER_FRAME - 80 - 172:
                 # This is mode 3
@@ -249,10 +288,23 @@ class Ppu:
                 self.memory.open_oam_access()
                 self.memory.open_vram_access()
 
-                # TODO SHould request interrupt if enabled
+                should_request_stat_interrupt = self.lcd_status.is_hblank_stat_interrupt_enabled()
 
         # TODO some other interrupts we might need to request here - If mode changed
         # or if Compare scanline is same as current scanline
+
+        # IF we changed mode and should interrupt, do it
+        if current_mode != self.lcd_status.get_mode() and should_request_stat_interrupt:
+            self.interrupts.request_interrupt(Interrupt.LCD_STAT)
+
+        # If current scanline (LY) is equal to value to compare to (LYC)
+        # Then set the coincidence flag (bit 2) of LCD status and request
+        # An STAT interrupt
+        if scanline == scanline_compare:
+            self.lcd_status.update_coincidence_flag(True)
+            self.interrupts.request_interrupt(Interrupt.LCD_STAT)
+        else:
+            self.lcd_status.update_coincidence_flag(False)
 
     def draw_scanline(self):
         '''

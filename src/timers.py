@@ -17,6 +17,8 @@ class TimerControl:
         self.divider_counter = CYCLES_PER_DIVIDER_INCREMENT
         self.timer_counter = 0
 
+        self.timer_overflowed = False
+
     def update_timers(self, cycles: int):
         '''
         Update the timers based on CPU cycles
@@ -26,21 +28,36 @@ class TimerControl:
 
         freq = self.get_timer_frequency()
 
+        # if self.mmu.is_timer_frequency_changed():
+        #     self.timer_counter = 0
+        #     self.mmu.update_timer_frequency_changed(False)
+
+        should_overflow = False
+
         # If Timer is enabled, update it
         if self.is_timer_enabled():
 
             self.timer_counter += cycles
-            if self.timer_counter >= freq:
+            while self.timer_counter >= freq:
                 # If we have counted enough cycles, increment timer
                 self.timer_counter -= freq
                 self.mmu.increment_timer_register()
+
+                if self.timer_overflowed:
+                    # Timer reads the overflow val (0) for one operation before resetting
+                    # and requesting interrupt
+                    self.timer_overflowed = False
+                    self.interrupts.request_interrupt(Interrupt.TIMER)
 
                 # If the Timer overflows (i.e. rolled around to 0) then
                 # Request a Timer interrupt and set the timer to the value
                 # in the Timer Modulo register (i.e. 0xFF06)
                 if self.mmu.read_byte(TIMER_ADDR) == 0:
-                    self.interrupts.request_interrupt(Interrupt.TIMER)
+                    should_overflow = True
                     self.mmu.write_byte(TIMER_ADDR, self.mmu.read_byte(TIMER_MODULATOR_ADDR))
+
+        if should_overflow:
+            self.timer_overflowed = True
 
     def is_timer_enabled(self):
         '''
@@ -75,5 +92,5 @@ class TimerControl:
 
         self.divider_counter -= cycles
         if self.divider_counter <= 0:
-            self.divider_counter = CYCLES_PER_DIVIDER_INCREMENT
+            self.divider_counter += CYCLES_PER_DIVIDER_INCREMENT
             self.mmu.increment_divider_register()

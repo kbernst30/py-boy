@@ -13,10 +13,13 @@ class InterruptControl:
         self.mmu = mmu
         self.cpu = cpu
 
-    def service_interrupts(self):
+    def service_interrupts(self) -> int:
         '''
         Service interrupts in order of priority, if enabled and requested
+
+        :return the number of cycles necessary to perform a service
         '''
+
         interrupts = [i for i in Interrupt]
         interrupts.sort()
 
@@ -25,7 +28,9 @@ class InterruptControl:
 
             # if the interrupt is requested and enabled, we can tell the CPU to handle it
             if self.is_interrupt_enabled(interrupt) and self.is_interrupt_requested(interrupt):
-                self.cpu.service_interrupt(interrupt)
+                return self.cpu.service_interrupt(interrupt)
+
+        return 0
 
     def request_interrupt(self, interrupt: Interrupt):
         '''
