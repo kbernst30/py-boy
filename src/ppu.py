@@ -106,10 +106,14 @@ class LcdStatus:
         lcd_mode = msb << 1 | lsb
 
         # match lcd_mode:
-        if lcd_mode == 0: return LcdMode.H_BLANK,
-        elif lcd_mode == 1: return LcdMode.V_BLANK,
-        elif lcd_mode == 2: return LcdMode.SPRITE_SEARCH,
-        elif lcd_mode == 3: return LcdMode.LCD_TRANSFER
+        if lcd_mode == 0:
+            return LcdMode.H_BLANK,
+        elif lcd_mode == 1:
+            return LcdMode.V_BLANK,
+        elif lcd_mode == 2:
+            return LcdMode.SPRITE_SEARCH,
+        elif lcd_mode == 3:
+            return LcdMode.LCD_TRANSFER
 
     def set_mode(self, mode: LcdMode):
         '''

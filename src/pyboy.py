@@ -30,7 +30,7 @@ class PyBoy:
         self.interrupts = InterruptControl(self.mmu, self.cpu)
         self.timers = TimerControl(self.mmu, self.interrupts)
 
-        # self.main_display = MainDisplay(self.ppu)
+        self.main_display = MainDisplay(self.ppu)
 
         self.rom = None
 
@@ -63,11 +63,11 @@ class PyBoy:
                     frame_cycles += cycles
 
                     self.timers.update_timers(cycles)
-                    # self.ppu.update_graphics(cycles)
+                    self.ppu.update_graphics(cycles)
                     self.interrupts.service_interrupts()
 
                 # After execution of a frame, update the screen
-                # self.main_display.render_screen()
+                self.main_display.render_screen()
 
             except Exception as e:
                 logger.exception(e)

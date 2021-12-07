@@ -20,15 +20,12 @@ class InterruptControl:
         interrupts = [i for i in Interrupt]
         interrupts.sort()
 
-        # If interrupts are enabled globally
-        if self.is_interrupt_master_enabled():
+        # Interrupts are serviced in order of priority, as defined in their bit values
+        for interrupt in interrupts:
 
-            # Interrupts are serviced in order of priority, as defined in their bit values
-            for interrupt in interrupts:
-
-                # if the interrupt is requested and enabled, we can tell the CPU to handle it
-                if self.is_interrupt_enabled(interrupt) and self.is_interrupt_requested(interrupt):
-                    self.cpu.service_interrupt(interrupt)
+            # if the interrupt is requested and enabled, we can tell the CPU to handle it
+            if self.is_interrupt_enabled(interrupt) and self.is_interrupt_requested(interrupt):
+                self.cpu.service_interrupt(interrupt)
 
     def request_interrupt(self, interrupt: Interrupt):
         '''

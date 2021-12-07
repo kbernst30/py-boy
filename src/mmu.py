@@ -80,7 +80,7 @@ class Mmu:
         self.memory[0xFFFF] = 0x00
 
         # TEMP
-        self.memory[0xFF44] = 0x90
+        # self.memory[0xFF44] = 0x90
 
     def read_byte(self, addr: int) -> int:
         '''

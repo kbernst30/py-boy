@@ -1,7 +1,7 @@
 from constants import CLOCK_SPEED, CYCLES_PER_DIVIDER_INCREMENT, TIMER_ADDR, TIMER_CONTROL_ADDR, TIMER_MODULATOR_ADDR
 from interrupts import InterruptControl
 from mmu import Mmu
-from utils import Interrupt, get_bit_val, is_bit_set
+from utils import Interrupt, is_bit_set
 
 
 class TimerControl:

@@ -152,26 +152,17 @@ class Cpu:
         :return the number of cycles the operation took
         '''
 
-        # If in HALT mode, effectively stop the clock by not returning any cycles
-        if self.halted:
-            return 4
-
         op = self._read_memory(self.program_counter)
         opcode = opcodes_map[op]
 
         if self.debug_ctr < 161502:
-        # if self.debug_ctr < 16510:
             # self._debug()
             self.debug_ctr += 1
-            # if self.debug_ctr > 31422 and self.debug_ctr <= 43148:
-            #     self.debug_set.add(f"{format(op, '02X')} - {opcode.mnemonic} - {opcode.cycles} - {opcode.alt_cycles}")
 
-            # if self.debug_ctr == 43149:
-            #     for item in self.debug_set:
-            #         print(item)
+        # If in HALT mode, effectively stop the clock by not returning any cycles
+        if self.halted:
+            return 4
 
-        # self._debug(opcode)
-        # self.debug_set.add(f"{format(op, '02X')} - {opcode.mnemonic} - {opcode.cycles} - {opcode.alt_cycles}")
         self.program_counter += 1
 
         cycles = 0
@@ -237,33 +228,36 @@ class Cpu:
         # If interrupt is being serviced, unhalt the CPU
         self.halted = False
 
-        # Disable any additional interrupts for now
-        self.interrupts_enabled = False
+        # IF interrupt master switch is enabled, we can go ahead and service
+        if self.is_interrupts_enabled():
 
-        # Turn off the request for the requested interrupt
-        interrupts_requested = self._read_memory(INTERRUPT_FLAG_ADDR)
-        interrupts_requested = reset_bit(interrupts_requested, interrupt.value)
-        self._write_memory(INTERRUPT_FLAG_ADDR, interrupts_requested)
+            # Disable any additional interrupts for now
+            self.interrupts_enabled = False
 
-        # Push current PC to the stack
-        self._push_word_to_stack(self.program_counter)
+            # Turn off the request for the requested interrupt
+            interrupts_requested = self._read_memory(INTERRUPT_FLAG_ADDR)
+            interrupts_requested = reset_bit(interrupts_requested, interrupt.value)
+            self._write_memory(INTERRUPT_FLAG_ADDR, interrupts_requested)
 
-        # Service the Interrupt based on value
-        # VBlank Interrupt - INT $40
-        # LCD Stat Interrupt - INT $48
-        # Timer Interrupt - INT $50
-        # Serial Interrupt - INT $58
-        # Joypad Interrupt - INT $60
-        if interrupt == Interrupt.V_BLANK:
-            self.program_counter = 0x40
-        elif interrupt == Interrupt.LCD_STAT:
-            self.program_counter = 0x48
-        elif interrupt == Interrupt.TIMER:
-            self.program_counter = 0x50
-        elif interrupt == Interrupt.SERIAL:
-            self.program_counter = 0x58
-        elif interrupt == Interrupt.JOYPAD:
-            self.program_counter = 0x60
+            # Push current PC to the stack
+            self._push_word_to_stack(self.program_counter)
+
+            # Service the Interrupt based on value
+            # VBlank Interrupt - INT $40
+            # LCD Stat Interrupt - INT $48
+            # Timer Interrupt - INT $50
+            # Serial Interrupt - INT $58
+            # Joypad Interrupt - INT $60
+            if interrupt == Interrupt.V_BLANK:
+                self.program_counter = 0x40
+            elif interrupt == Interrupt.LCD_STAT:
+                self.program_counter = 0x48
+            elif interrupt == Interrupt.TIMER:
+                self.program_counter = 0x50
+            elif interrupt == Interrupt.SERIAL:
+                self.program_counter = 0x58
+            elif interrupt == Interrupt.JOYPAD:
+                self.program_counter = 0x60
 
     def _read_memory(self, addr: int) -> int:
         '''
@@ -451,12 +445,10 @@ class Cpu:
             return
 
         if self.last_opcode.operation == Operation.DI and self.will_disable_interrupts:
-            print("DISABLE")
             self.will_disable_interrupts = False
             self.interrupts_enabled = False
 
         elif self.last_opcode.operation == Operation.EI and self.will_enable_interrupts:
-            print("ENABLE")
             self.will_enable_interrupts = False
             self.interrupts_enabled = True
 
@@ -891,15 +883,13 @@ class Cpu:
 
     def _do_halt(self, opcode: OpCode) -> int:
         '''
-        Enter HALT mode if interrupts are enabled, otherwise skip the program counter forward
-        over the next instruction - TODO that failed tests, just do HALT for now
+        Enter HALT mode
+        TODO there seemed to be other stuff in docs that suggested HALT
+        should only occur if interrupts are enabled or skip instruction if we
+        don't HALT - let's figure that out
         '''
 
-        if self.interrupts_enabled:
-            self.halted = True
-        # else:
-        #     self.program_counter += 1
-
+        self.halted = True
         return opcode.cycles
 
     def _do_increment_8_bit(self, opcode: OpCode) -> int:
@@ -1292,7 +1282,6 @@ class Cpu:
             cycles = opcode.alt_cycles if not self._is_carry_flag_set() else cycles
         elif opcode.code == 0xD9:
             self.program_counter = self._pop_word_from_stack()
-            # self.will_enable_interrupts = True
             self.interrupts_enabled = True
         else: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
