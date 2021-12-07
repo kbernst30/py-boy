@@ -12,8 +12,9 @@ from constants import (
     SCREEN_HEIGHT,
     SCREEN_WIDTH
 )
+from interrupts import InterruptControl
 from mmu import Mmu
-from utils import get_bit_val, is_bit_set, LcdMode
+from utils import Interrupt, get_bit_val, is_bit_set, LcdMode
 
 
 class LcdControl:
@@ -128,8 +129,10 @@ class LcdStatus:
 
 class Ppu:
 
-    def __init__(self, memory: Mmu):
+    def __init__(self, memory: Mmu, interrupts: InterruptControl):
         self.memory = memory
+        self.interrupts = interrupts
+
         self.lcd_control = LcdControl(self.memory)
         self.lcd_status = LcdStatus(self.memory)
 
@@ -168,16 +171,13 @@ class Ppu:
 
         # We have run the number of necessary cycles to draw a scanline
         if self.scanline_counter <= 0:
-            # print(self.scanline_counter)
             self.scanline_counter = CYCLES_PER_SCANLINE
 
-            # TODO Draw the next scanline
             scanline = self.memory.read_byte(CURRENT_SCANLINE_ADDR)
             self.memory.update_scanline()
 
             if scanline == 144:
-                # Entering VBlank, request interrupt
-                pass
+                self.interrupts.request_interrupt(Interrupt.V_BLANK)
 
             elif scanline > MAX_SCANLINE_VALUE:
                 self.memory.reset_scanline()
@@ -379,7 +379,6 @@ class Ppu:
         tile_data_high = self.memory.read_byte(addr + offset + 1)
 
         # Loop through pixels left to right as that's the order in the tile (bit 7 - 0)
-        # return [self._get_color(tile_data_low, tile_data_high, j) for j in range(7, -1, -1)]
         return self._get_color(tile_data_low, tile_data_high, x)
 
     def _get_color(self, tile_data_low: int, tile_data_high: int, bit: int) -> int:
@@ -405,11 +404,16 @@ class Ppu:
         # Bit 3-2 - Color for index 1
         # Bit 1-0 - Color for index 0
         # match color_id:
-        if color_id == 3: color = get_bit_val(pallette, 7) << 1 | get_bit_val(pallette, 6)
-        elif color_id == 2: color = get_bit_val(pallette, 5) << 1 | get_bit_val(pallette, 4)
-        elif color_id == 1: color = get_bit_val(pallette, 3) << 1 | get_bit_val(pallette, 2)
-        elif color_id == 0: color = get_bit_val(pallette, 1) << 1 | get_bit_val(pallette, 0)
-        else: raise Exception(f"Invalid color_id - {color_id}")
+        if color_id == 3:
+            color = get_bit_val(pallette, 7) << 1 | get_bit_val(pallette, 6)
+        elif color_id == 2:
+            color = get_bit_val(pallette, 5) << 1 | get_bit_val(pallette, 4)
+        elif color_id == 1:
+            color = get_bit_val(pallette, 3) << 1 | get_bit_val(pallette, 2)
+        elif color_id == 0:
+            color = get_bit_val(pallette, 1) << 1 | get_bit_val(pallette, 0)
+        else:
+            raise Exception(f"Invalid color_id - {color_id}")
 
         return GB_COLORS[color]
 
@@ -423,7 +427,6 @@ class Ppu:
             return self.get_background_tile_pixels(y_pos)
 
         # Get all the pixels needed for a given scanline
-        # pixels = [get_pixel(i) for i in range(0, SCREEN_WIDTH)]
         pixels = get_pixels()
         i = 0
         for pixel in pixels:

@@ -16,6 +16,12 @@ class Interrupt(IntEnum):
     JOYPAD = 4
 
 
+class CartridgeType(Enum):
+    ROM_ONLY = 0
+    MBC_1 = 1
+    MBC_2 = 2
+
+
 def is_bit_set(data: int, position: int) -> bool:
     return (data & (1 << position)) > 0
 

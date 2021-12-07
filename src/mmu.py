@@ -1,6 +1,7 @@
 import logging
 
 from constants import CURRENT_SCANLINE_ADDR, DIVIDER_REGISTER_ADDR, MAXIMUM_RAM_BANKS, RAM_BANK_SIZE, TIMER_ADDR
+from rom import Rom
 
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,18 @@ class Mmu:
         self.color_pallette_access = True  # TODO CGB only
         self.vram_access = True
 
+        # Default current ROM bank to 1
+        self.rom_bank = 1
+
+        # MBC modes
+        self.mbc1 = False
+        self.mbc2 = False
+
+        self.number_of_rom_banks = 2
+
         self.reset()
+
+        self.rom = None
 
     def reset(self):
         '''
@@ -79,6 +91,8 @@ class Mmu:
         self.memory[0xFF4B] = 0x00
         self.memory[0xFFFF] = 0x00
 
+        self.rom_bank = 1
+
         # TEMP
         # self.memory[0xFF44] = 0x90
 
@@ -96,7 +110,14 @@ class Mmu:
             # Reading something currently restricted, return garbage (0xFF)
             return 0xFF
         else:
-            return self.memory[addr]
+
+            if addr >= 0x4000 and addr < 0x8000:
+                # First ROM bank will always be mapped into memory, but anything in this range might
+                # use a different bank, so let's find the appropriate bank to read from
+                resolved_addr = (addr - 0x4000) + (self.rom_bank * 0x4000)
+                return self.rom.data[resolved_addr]
+            else:
+                return self.memory[addr]
 
     def write_byte(self, addr: int, data: int):
         '''
@@ -114,7 +135,6 @@ class Mmu:
 
         elif addr < 0x8000:
             # Restricted ROM access here... do not write
-            # TODO Handle banking
             self._handle_banking(addr, data)
 
         elif addr >= 0xE000 and addr < 0xFE00:
@@ -134,10 +154,26 @@ class Mmu:
         else:
             self.memory[addr] = data & 0xFF
 
-    def load_rom(self, rom):
+    def load_rom(self, rom: Rom):
+        '''
+        Load the ROM into memory from 0x000 - 0x7FFF
+        '''
+
+        self.rom = rom
+
         end_addr = 0x8000
         for i in range(min(end_addr, len(rom.data))):
             self.memory[i] = rom.data[i]
+
+        # Select proper MBC mode
+        # TODO this is not clean - might be better way to do this
+        rom_mode = rom.get_cartridge_type()
+        if rom_mode == 1 or rom_mode == 2 or rom_mode == 3:
+            self.mbc1 = True
+        elif rom_mode == 5 or rom_mode == 6:
+            self.mbc2 = True
+
+        self.number_of_rom_banks = rom.get_number_of_banks()
 
     def update_scanline(self):
         '''
@@ -215,11 +251,30 @@ class Mmu:
         of dealing with ROM and RAM banking. Handle these cases here
         '''
 
-        # If writing to address less than 0x2000, we are enabling or disabling RAM access
         if addr < 0x2000:
+            # If writing to address less than 0x2000, we are enabling or disabling RAM access
+
             if (data & 0xF) == 0xA:
                 # If the lower nibble of data being written is 0xA (for some reason) then we enable
                 # RAM, otherwise disable
                 self.enable_ram = True
             else:
                 self.enable_ram = False
+
+        elif addr >= 0x2000 and addr < 0x4000:
+            # Writing to this range controls the ROM bank number
+
+            if self.mbc1:
+                # We only care about the lower 5 bits of the data being written here, for MBC1
+                new_rom_bank = data & 0x1F
+
+                if new_rom_bank > self.number_of_rom_banks:
+                    # If we request a bank greater than what the ROM has, we need to mask
+                    # TODO see pandocs for details
+                    pass
+
+                self.rom_bank = new_rom_bank
+
+        elif addr >= 0x4000 and addr < 0x6000:
+            # TODO deal with other bits for MBC 1
+            print("HI BITS")

@@ -26,9 +26,9 @@ class PyBoy:
     def __init__(self):
         self.mmu = Mmu()
         self.cpu = Cpu(self.mmu)
-        self.ppu = Ppu(self.mmu)
         self.interrupts = InterruptControl(self.mmu, self.cpu)
         self.timers = TimerControl(self.mmu, self.interrupts)
+        self.ppu = Ppu(self.mmu, self.interrupts)
 
         self.main_display = MainDisplay(self.ppu)
 
