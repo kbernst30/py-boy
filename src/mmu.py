@@ -93,6 +93,8 @@ class Mmu:
         self.memory[0xFF4B] = 0x00
         self.memory[0xFFFF] = 0x00
 
+        self.memory[0xFF00] = 0xFF  # JOYPAD TODO WHY?
+
         self.rom_bank = 1
 
         # TEMP
@@ -119,6 +121,10 @@ class Mmu:
                 resolved_addr = (addr - 0x4000) + (self.rom_bank * 0x4000)
                 return self.rom.data[resolved_addr]
             else:
+
+                if addr >= 0xA000 and addr < 0xC000:
+                    print("RAM BANKED")
+
                 return self.memory[addr]
 
     def write_byte(self, addr: int, data: int):
@@ -152,6 +158,10 @@ class Mmu:
         elif addr == DIVIDER_REGISTER_ADDR or addr == CURRENT_SCANLINE_ADDR:
             # We cannot write here directly - reset to 0
             self.memory[addr] = 0
+
+        elif addr == 0xFF46:
+            pass
+            # print("DMA TRANSFER")
 
         elif addr == TIMER_CONTROL_ADDR:
             # If we are changing the data of the timer controller, then the timer itself will need

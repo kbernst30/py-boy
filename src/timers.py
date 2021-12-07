@@ -28,9 +28,9 @@ class TimerControl:
 
         freq = self.get_timer_frequency()
 
-        # if self.mmu.is_timer_frequency_changed():
-        #     self.timer_counter = 0
-        #     self.mmu.update_timer_frequency_changed(False)
+        if self.mmu.is_timer_frequency_changed():
+            self.timer_counter = 0
+            self.mmu.update_timer_frequency_changed(False)
 
         should_overflow = False
 
