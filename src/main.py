@@ -10,7 +10,7 @@ from pyboy import PyBoy
 
 pyboy = PyBoy()
 main_window = pyglet.window.Window(SCREEN_WIDTH * DISPLAY_FACTOR, SCREEN_HEIGHT * DISPLAY_FACTOR, "PyBoy")
-vram_viewer = pyglet.window.Window(256, 256, "VRAM")
+vram_viewer = pyglet.window.Window(512, 512, "VRAM")
 
 main_window.set_location(100, 100)
 vram_viewer.set_location(main_window.get_location()[0] + main_window.width + 10, main_window.get_location()[1])
@@ -49,23 +49,23 @@ y = 0
 
 for tile in pyboy.get_tiles():
 
-    if x >= 256:
+    if x >= 512:
         x = 0
-        y += 8
+        y += 8 * 2
 
     for i in range(len(tile)):
         line = tile[i]
         for j in range(len(line)):
             tile_pixels[(x + i), (y + j)] = shapes.Rectangle(
-                x=x + j,
-                y=256 - y - i,
-                width=1,
-                height=1,
+                x=x + (j * 2),
+                y=512 - y - (i * 2),
+                width=2,
+                height=2,
                 color=(255, 0, 0),
                 batch=tile_batch
             )
 
-    x += 8
+    x += 8 * 2
 
 
 def run_frame(dt):
@@ -89,9 +89,9 @@ def run_frame(dt):
     y = 0
     for tile in pyboy.get_tiles():
 
-        if x >= 256:
+        if x >= 512:
             x = 0
-            y += 8
+            y += 16
 
         for i in range(len(tile)):
             line = tile[i]
@@ -106,7 +106,7 @@ def run_frame(dt):
                 if current_color[0] != red or current_color[1] != green or current_color[2] != blue:
                     tile_pixels[(x + i), (y + j)].color = (red, green, blue)
 
-        x += 8
+        x += 16
 
 
 @main_window.event("on_draw")
