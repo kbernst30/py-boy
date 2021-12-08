@@ -2,12 +2,9 @@ import sys
 
 import logging
 
-import pygame
-
 from constants import MAX_CYCLES_PER_FRAME
 
 from cpu import Cpu
-from display import MainDisplay
 from interrupts import InterruptControl
 from mmu import Mmu
 from ppu import Ppu
@@ -20,9 +17,6 @@ logger = logging.getLogger(__name__)
 
 class PyBoy:
 
-    DISPLAY_SCALE = 5
-    TIMER = pygame.USEREVENT + 1
-
     def __init__(self):
         self.mmu = Mmu()
         self.cpu = Cpu(self.mmu)
@@ -30,11 +24,7 @@ class PyBoy:
         self.timers = TimerControl(self.mmu, self.interrupts)
         self.ppu = Ppu(self.mmu, self.interrupts)
 
-        self.main_display = MainDisplay(self.ppu)
-
         self.rom = None
-
-        pygame.init()
 
     def load_game(self, file):
         self.rom = Rom(file)
@@ -42,43 +32,35 @@ class PyBoy:
 
         self.cpu.reset()
 
-    def run(self):
-        # Main emu loop
-        pygame.time.set_timer(self.TIMER, 17)  # ~60 Hz
+        self.rom.debug_header()
 
+    def run(self):
         if not self.rom:
             print("No ROM loaded")
             return
 
-        self.rom.debug_header()
+        frame_cycles = 0
 
-        running = True
-        while running:
-            frame_cycles = 0
+        try:
+            # Execute a frame based on number of cycles we expect per frame
+            while frame_cycles < MAX_CYCLES_PER_FRAME:
+                cycles = self.cpu.execute()
+                frame_cycles += cycles
 
-            try:
-                # Execute a frame based on number of cycles we expect per frame
-                while frame_cycles < MAX_CYCLES_PER_FRAME:
-                    cycles = self.cpu.execute()
-                    frame_cycles += cycles
+                self.timers.update_timers(cycles)
+                self.ppu.update_graphics(cycles)
 
-                    self.timers.update_timers(cycles)
-                    self.ppu.update_graphics(cycles)
+                self.interrupts.service_interrupts()
 
-                    self.interrupts.service_interrupts()
+        except Exception as e:
+            logger.exception(e)
+            self.exit(1)
 
-                # After execution of a frame, update the screen
-                self.main_display.render_screen()
+    def get_screen(self):
+        return self.ppu.get_screen()
 
-            except Exception as e:
-                logger.exception(e)
-                self.exit(1)
-
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self.exit()
+    def get_tiles(self):
+        return self.ppu.get_tiles()
 
     def exit(self, exit_code=0):
-        pygame.display.quit()
-        pygame.quit()
         sys.exit(exit_code)

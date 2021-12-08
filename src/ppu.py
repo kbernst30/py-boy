@@ -321,18 +321,11 @@ class Ppu:
         Get all the tiles in VRAM - This is used for debugging purposes
         '''
 
-        # Let's just start with BG tiles for now
-        # Get the address that background/window tiles are in from LCD control
-        is_tile_identifier_signed = self.lcd_control.is_background_tile_data_addressing_signed()
-        addr_space_len = 0xFFF
-
-        if not is_tile_identifier_signed:
-            start_addr = self.lcd_control.get_background_tile_data_area()
-        else:
-            start_addr = self.lcd_control.get_background_tile_data_area() - int(addr_space_len / 2)
-
         tiles = []
         counter = 0
+
+        start_addr = 0x8000
+        addr_space_len = 8192
 
         current_tile = []
         for addr in range(start_addr, start_addr + addr_space_len, 2):

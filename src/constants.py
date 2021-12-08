@@ -2,6 +2,7 @@ import math
 
 SCREEN_WIDTH = 160
 SCREEN_HEIGHT = 144
+DISPLAY_FACTOR = 4
 
 # Cycles per frame is determined by the clock frequency of the CPU (4.194304 MHz)
 # And the number of expected frames per second (~60) - to make this accurage it should be 59.7275
