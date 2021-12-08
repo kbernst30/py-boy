@@ -72,6 +72,13 @@ class LcdControl:
 
         return 0x9C00 if is_bit_set(self.memory.read_byte(LCD_CONTROL_ADDR), 3) else 0x9800
 
+    def is_window_enabled(self) -> bool:
+        '''
+        Return True if the Window is currently enabled and should be drawn
+        '''
+
+        return is_bit_set(self.memory.read_byte(LCD_CONTROL_ADDR), 5)
+
 
 class LcdStatus:
     '''
