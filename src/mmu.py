@@ -158,8 +158,9 @@ class Mmu:
             if self.enable_ram:
                 print("RAM")
 
-        elif addr >= 0xFEA0 and addr < 0xFF00:
+        elif addr >= 0xFEA0 and addr < 0xFF00 or addr == 0xFF00:
             # Restricted area - do NOT allow writing
+            # TODO FF00 is not restricted - but joypad is not implemented yet so don't allow modification
             pass
             # logger.warn(f"Attempted write to restricted addr - 0x{format(addr, '0x')}")
 
