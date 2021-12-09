@@ -13,7 +13,7 @@ main_window = pyglet.window.Window(SCREEN_WIDTH * DISPLAY_FACTOR, SCREEN_HEIGHT 
 vram_viewer = pyglet.window.Window(512, 512, "VRAM")
 
 main_window.set_location(100, 100)
-vram_viewer.set_location(main_window.get_location()[0] + main_window.width + 10, main_window.get_location()[1])
+vram_viewer.set_location(main_window.get_location()[0] + main_window.width + 10, main_window.get_location()[1] + 20)
 
 pyglet.gl.glClearColor(255, 255, 255, 0)
 
