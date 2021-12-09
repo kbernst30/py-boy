@@ -330,7 +330,7 @@ class Cpu:
         '''
 
         byte = self._read_memory(self.program_counter)
-        self.program_counter += 1
+        self.program_counter = (self.program_counter + 1) & 0xFFFF
         return byte & 0xFF
 
     def _get_next_byte_signed(self) -> int:
@@ -1295,7 +1295,7 @@ class Cpu:
         op = self._read_memory(self.program_counter)
         opcode = prefix_opcodes_map[op]
 
-        self.program_counter += 1
+        self.program_counter = (self.program_counter + 1) & 0xFFFF
 
         # match opcode.operation:
         if opcode.operation == Operation.BIT: return self._do_bit(opcode)

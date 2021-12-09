@@ -41,6 +41,13 @@ CYCLES_PER_SCANLINE = 456  # It takes 456 clock cycles to draw one scanline
 BACKGROUND_SCROLL_Y = 0xFF42
 BACKGROUND_SCROLL_X = 0xFF43
 
+# WY and WX registers - these specify the top-left coordinates
+# of the window, which can be displayed over the background
+# WX is offset by +7 pixels, so a value of 7 places the window
+# at x = 0
+WINDOW_POS_Y = 0xFF4A
+WINDOW_POS_X = 0xFF4B
+
 COLOR_PALLETTE_ADDR = 0xFF47
 
 # Banking
