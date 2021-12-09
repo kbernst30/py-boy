@@ -19,10 +19,10 @@ class PyBoy:
 
     def __init__(self):
         self.mmu = Mmu()
-        self.cpu = Cpu(self.mmu)
-        self.interrupts = InterruptControl(self.mmu, self.cpu)
+        self.interrupts = InterruptControl(self.mmu)
         self.timers = TimerControl(self.mmu, self.interrupts)
         self.ppu = Ppu(self.mmu, self.interrupts)
+        self.cpu = Cpu(self.mmu, self.timers, self.ppu)
 
         self.rom = None
 
@@ -47,10 +47,9 @@ class PyBoy:
                 cycles = self.cpu.execute()
                 frame_cycles += cycles
 
-                self.timers.update_timers(cycles)
-                self.ppu.update_graphics(cycles)
-
-                self.interrupts.service_interrupts()
+                interrupt = self.interrupts.get_servicable_interrupt()
+                if interrupt is not None:
+                    self.cpu.service_interrupt(interrupt)
 
         except Exception as e:
             logger.exception(e)

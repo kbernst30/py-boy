@@ -6,6 +6,8 @@ from constants import INTERRUPT_FLAG_ADDR, PROGRAM_COUNTER_INIT, STACK_POINTER_I
 
 from ops import OpCode, Operation, opcodes_map, prefix_opcodes_map
 from mmu import Mmu
+from ppu import Ppu
+from timers import TimerControl
 from utils import Interrupt, bit_negate, get_bit_val, is_bit_set, reset_bit, set_bit
 
 
@@ -98,7 +100,7 @@ class Cpu:
     There is a 2-Byte register for the Program counter and a 2-Byte register for the Stack Pointer
     '''
 
-    def __init__(self, memory: Mmu):
+    def __init__(self, memory: Mmu, timer: TimerControl, ppu: Ppu):
         # Register pairs
         self.af = RegisterPair("AF")
         self.bc = RegisterPair("BC")
@@ -110,6 +112,8 @@ class Cpu:
 
         # Memory Management Unit
         self.memory = memory
+        self.timer = timer
+        self.ppu = ppu
 
         # Interrupts
         self.interrupts_enabled = True
@@ -121,6 +125,8 @@ class Cpu:
 
         # For HALT mode - will be disabled when an interrupt occurs
         self.halted = False
+
+        self.cycle_tracker = 0
 
         self.debug_ctr = 0
         self.debug_set = set()
@@ -154,6 +160,8 @@ class Cpu:
         :return the number of cycles the operation took
         '''
 
+        self.cycle_tracker = 0
+
         op = self._read_memory(self.program_counter)
         opcode = opcodes_map[op]
 
@@ -163,6 +171,7 @@ class Cpu:
 
         # If in HALT mode, effectively stop the clock by not returning any cycles
         if self.halted:
+            self._sync_cycles(4)
             return 4
 
         self.program_counter = (self.program_counter + 1) & 0xFFFF
@@ -219,6 +228,9 @@ class Cpu:
         self._toggle_interrupts_enabled()
         self.last_opcode = opcode
 
+        # Sync remaining cycles for the instruction
+        self._sync_cycles(cycles - self.cycle_tracker)
+
         return cycles
 
     def is_interrupts_enabled(self) -> bool:
@@ -270,6 +282,18 @@ class Cpu:
             return 20
 
         return 0
+
+    def _sync_cycles(self, cycles: int):
+        '''
+        Instructions increment other components clock during execution
+        not all at once - this is used to be able to sync components
+        during execution
+        '''
+
+        self.timer.update_timers(cycles)
+        self.ppu.update_graphics(cycles)
+
+        self.cycle_tracker += cycles
 
     def _read_memory(self, addr: int) -> int:
         '''
@@ -597,7 +621,10 @@ class Cpu:
         elif opcode.code == 0x43: self._update_zero_flag(not is_bit_set(self.de.lo, 0))
         elif opcode.code == 0x44: self._update_zero_flag(not is_bit_set(self.hl.hi, 0))
         elif opcode.code == 0x45: self._update_zero_flag(not is_bit_set(self.hl.lo, 0))
-        elif opcode.code == 0x46: self._update_zero_flag(not is_bit_set(self._read_memory(self.hl.value), 0))
+        elif opcode.code == 0x46:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._update_zero_flag(not is_bit_set(val, 0))
         elif opcode.code == 0x47: self._update_zero_flag(not is_bit_set(self.af.hi, 0))
         elif opcode.code == 0x48: self._update_zero_flag(not is_bit_set(self.bc.hi, 1))
         elif opcode.code == 0x49: self._update_zero_flag(not is_bit_set(self.bc.lo, 1))
@@ -605,7 +632,10 @@ class Cpu:
         elif opcode.code == 0x4B: self._update_zero_flag(not is_bit_set(self.de.lo, 1))
         elif opcode.code == 0x4C: self._update_zero_flag(not is_bit_set(self.hl.hi, 1))
         elif opcode.code == 0x4D: self._update_zero_flag(not is_bit_set(self.hl.lo, 1))
-        elif opcode.code == 0x4E: self._update_zero_flag(not is_bit_set(self._read_memory(self.hl.value), 1))
+        elif opcode.code == 0x4E:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._update_zero_flag(not is_bit_set(val, 1))
         elif opcode.code == 0x4F: self._update_zero_flag(not is_bit_set(self.af.hi, 1))
         elif opcode.code == 0x50: self._update_zero_flag(not is_bit_set(self.bc.hi, 2))
         elif opcode.code == 0x51: self._update_zero_flag(not is_bit_set(self.bc.lo, 2))
@@ -613,7 +643,10 @@ class Cpu:
         elif opcode.code == 0x53: self._update_zero_flag(not is_bit_set(self.de.lo, 2))
         elif opcode.code == 0x54: self._update_zero_flag(not is_bit_set(self.hl.hi, 2))
         elif opcode.code == 0x55: self._update_zero_flag(not is_bit_set(self.hl.lo, 2))
-        elif opcode.code == 0x56: self._update_zero_flag(not is_bit_set(self._read_memory(self.hl.value), 2))
+        elif opcode.code == 0x56:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._update_zero_flag(not is_bit_set(val, 2))
         elif opcode.code == 0x57: self._update_zero_flag(not is_bit_set(self.af.hi, 2))
         elif opcode.code == 0x58: self._update_zero_flag(not is_bit_set(self.bc.hi, 3))
         elif opcode.code == 0x59: self._update_zero_flag(not is_bit_set(self.bc.lo, 3))
@@ -621,7 +654,10 @@ class Cpu:
         elif opcode.code == 0x5B: self._update_zero_flag(not is_bit_set(self.de.lo, 3))
         elif opcode.code == 0x5C: self._update_zero_flag(not is_bit_set(self.hl.hi, 3))
         elif opcode.code == 0x5D: self._update_zero_flag(not is_bit_set(self.hl.lo, 3))
-        elif opcode.code == 0x5E: self._update_zero_flag(not is_bit_set(self._read_memory(self.hl.value), 3))
+        elif opcode.code == 0x5E:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._update_zero_flag(not is_bit_set(val, 3))
         elif opcode.code == 0x5F: self._update_zero_flag(not is_bit_set(self.af.hi, 3))
         elif opcode.code == 0x60: self._update_zero_flag(not is_bit_set(self.bc.hi, 4))
         elif opcode.code == 0x61: self._update_zero_flag(not is_bit_set(self.bc.lo, 4))
@@ -629,7 +665,10 @@ class Cpu:
         elif opcode.code == 0x63: self._update_zero_flag(not is_bit_set(self.de.lo, 4))
         elif opcode.code == 0x64: self._update_zero_flag(not is_bit_set(self.hl.hi, 4))
         elif opcode.code == 0x65: self._update_zero_flag(not is_bit_set(self.hl.lo, 4))
-        elif opcode.code == 0x66: self._update_zero_flag(not is_bit_set(self._read_memory(self.hl.value), 4))
+        elif opcode.code == 0x66:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._update_zero_flag(not is_bit_set(val, 4))
         elif opcode.code == 0x67: self._update_zero_flag(not is_bit_set(self.af.hi, 4))
         elif opcode.code == 0x68: self._update_zero_flag(not is_bit_set(self.bc.hi, 5))
         elif opcode.code == 0x69: self._update_zero_flag(not is_bit_set(self.bc.lo, 5))
@@ -637,7 +676,10 @@ class Cpu:
         elif opcode.code == 0x6B: self._update_zero_flag(not is_bit_set(self.de.lo, 5))
         elif opcode.code == 0x6C: self._update_zero_flag(not is_bit_set(self.hl.hi, 5))
         elif opcode.code == 0x6D: self._update_zero_flag(not is_bit_set(self.hl.lo, 5))
-        elif opcode.code == 0x6E: self._update_zero_flag(not is_bit_set(self._read_memory(self.hl.value), 5))
+        elif opcode.code == 0x6E:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._update_zero_flag(not is_bit_set(val, 5))
         elif opcode.code == 0x6F: self._update_zero_flag(not is_bit_set(self.af.hi, 5))
         elif opcode.code == 0x70: self._update_zero_flag(not is_bit_set(self.bc.hi, 6))
         elif opcode.code == 0x71: self._update_zero_flag(not is_bit_set(self.bc.lo, 6))
@@ -645,7 +687,10 @@ class Cpu:
         elif opcode.code == 0x73: self._update_zero_flag(not is_bit_set(self.de.lo, 6))
         elif opcode.code == 0x74: self._update_zero_flag(not is_bit_set(self.hl.hi, 6))
         elif opcode.code == 0x75: self._update_zero_flag(not is_bit_set(self.hl.lo, 6))
-        elif opcode.code == 0x76: self._update_zero_flag(not is_bit_set(self._read_memory(self.hl.value), 6))
+        elif opcode.code == 0x76:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._update_zero_flag(not is_bit_set(val, 6))
         elif opcode.code == 0x77: self._update_zero_flag(not is_bit_set(self.af.hi, 6))
         elif opcode.code == 0x78: self._update_zero_flag(not is_bit_set(self.bc.hi, 7))
         elif opcode.code == 0x79: self._update_zero_flag(not is_bit_set(self.bc.lo, 7))
@@ -653,7 +698,10 @@ class Cpu:
         elif opcode.code == 0x7B: self._update_zero_flag(not is_bit_set(self.de.lo, 7))
         elif opcode.code == 0x7C: self._update_zero_flag(not is_bit_set(self.hl.hi, 7))
         elif opcode.code == 0x7D: self._update_zero_flag(not is_bit_set(self.hl.lo, 7))
-        elif opcode.code == 0x7E: self._update_zero_flag(not is_bit_set(self._read_memory(self.hl.value), 7))
+        elif opcode.code == 0x7E:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._update_zero_flag(not is_bit_set(val, 7))
         elif opcode.code == 0x7F: self._update_zero_flag(not is_bit_set(self.af.hi, 7))
         else: raise Exception(f"Unknown prefix operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
@@ -838,6 +886,7 @@ class Cpu:
             val = self.hl.lo
         elif opcode.code == 0x35:
             val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
             val -= 1
             if val < 0:
                 val = 255
@@ -932,6 +981,7 @@ class Cpu:
             val = self.hl.lo
         elif opcode.code == 0x34:
             val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
             val += 1
             if val > 255:
                 val = 0
@@ -1062,7 +1112,9 @@ class Cpu:
         elif opcode.code == 0x32:
             self._write_memory(self.hl.value, self.af.hi)
             self.hl.decrement()
-        elif opcode.code == 0x36: self._write_memory(self.hl.value, self._get_next_byte())
+        elif opcode.code == 0x36:
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, self._get_next_byte())
         elif opcode.code == 0x3A:
             self.af.hi = self._read_memory(self.hl.value)
             self.hl.decrement()
@@ -1131,7 +1183,9 @@ class Cpu:
         elif opcode.code == 0x7F: self.af.hi = self.af.hi
         elif opcode.code == 0x3E: self.af.hi = self._get_next_byte()
         elif opcode.code == 0xE2: self._write_memory(0xFF00 + self.bc.lo, self.af.hi)
-        elif opcode.code == 0xEA: self._write_memory(self._get_next_word(), self.af.hi)
+        elif opcode.code == 0xEA:
+            self._sync_cycles(8)
+            self._write_memory(self._get_next_word(), self.af.hi)
         elif opcode.code == 0xF2: self.af.hi = self._read_memory(0xFF00 + self.bc.lo)
         elif opcode.code == 0xF8:
             offset = self._get_next_byte_signed()
@@ -1141,7 +1195,10 @@ class Cpu:
             self._update_carry_flag((self.stack_pointer & 0xFF) + (offset & 0xFF) > 0xFF)
             self._update_half_carry_flag((self.stack_pointer & 0xF) + (offset & 0xF) > 0xF)
         elif opcode.code == 0xF9: self.stack_pointer = self.hl.value
-        elif opcode.code == 0xFA: self.af.hi = self._read_memory(self._get_next_word())
+        elif opcode.code == 0xFA:
+            word = self._get_next_word()
+            self._sync_cycles(8)
+            self.af.hi = self._read_memory(word)
         else: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return opcode.cycles
@@ -1155,8 +1212,13 @@ class Cpu:
         '''
 
         # match opcode.code:
-        if opcode.code == 0xE0: self._write_memory(0xFF00 | self._get_next_byte(), self.af.hi)
-        elif opcode.code == 0xF0: self.af.hi = self._read_memory(0xFF00 | self._get_next_byte())
+        if opcode.code == 0xE0:
+            self._sync_cycles(4)
+            self._write_memory(0xFF00 | self._get_next_byte(), self.af.hi)
+        elif opcode.code == 0xF0:
+            data = self._get_next_byte()
+            self._sync_cycles(4)
+            self.af.hi = self._read_memory(0xFF00 | data)
         else: raise Exception(f"Unknown operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
         return opcode.cycles
@@ -1317,7 +1379,11 @@ class Cpu:
         elif opcode.code == 0x83: self.de.lo = reset_bit(self.de.lo, 0)
         elif opcode.code == 0x84: self.hl.hi = reset_bit(self.hl.hi, 0)
         elif opcode.code == 0x85: self.hl.lo = reset_bit(self.hl.lo, 0)
-        elif opcode.code == 0x86: self._write_memory(self.hl.value, reset_bit(self._read_memory(self.hl.value), 0))
+        elif opcode.code == 0x86:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, reset_bit(val, 0))
         elif opcode.code == 0x87: self.af.hi = reset_bit(self.af.hi, 0)
         elif opcode.code == 0x88: self.bc.hi = reset_bit(self.bc.hi, 1)
         elif opcode.code == 0x89: self.bc.lo = reset_bit(self.bc.lo, 1)
@@ -1325,7 +1391,11 @@ class Cpu:
         elif opcode.code == 0x8B: self.de.lo = reset_bit(self.de.lo, 1)
         elif opcode.code == 0x8C: self.hl.hi = reset_bit(self.hl.hi, 1)
         elif opcode.code == 0x8D: self.hl.lo = reset_bit(self.hl.lo, 1)
-        elif opcode.code == 0x8E: self._write_memory(self.hl.value, reset_bit(self._read_memory(self.hl.value), 1))
+        elif opcode.code == 0x8E:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, reset_bit(val, 1))
         elif opcode.code == 0x8F: self.af.hi = reset_bit(self.af.hi, 1)
         elif opcode.code == 0x90: self.bc.hi = reset_bit(self.bc.hi, 2)
         elif opcode.code == 0x91: self.bc.lo = reset_bit(self.bc.lo, 2)
@@ -1333,7 +1403,11 @@ class Cpu:
         elif opcode.code == 0x93: self.de.lo = reset_bit(self.de.lo, 2)
         elif opcode.code == 0x94: self.hl.hi = reset_bit(self.hl.hi, 2)
         elif opcode.code == 0x95: self.hl.lo = reset_bit(self.hl.lo, 2)
-        elif opcode.code == 0x96: self._write_memory(self.hl.value, reset_bit(self._read_memory(self.hl.value), 2))
+        elif opcode.code == 0x96:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, reset_bit(val, 2))
         elif opcode.code == 0x97: self.af.hi = reset_bit(self.af.hi, 2)
         elif opcode.code == 0x98: self.bc.hi = reset_bit(self.bc.hi, 3)
         elif opcode.code == 0x99: self.bc.lo = reset_bit(self.bc.lo, 3)
@@ -1341,7 +1415,11 @@ class Cpu:
         elif opcode.code == 0x9B: self.de.lo = reset_bit(self.de.lo, 3)
         elif opcode.code == 0x9C: self.hl.hi = reset_bit(self.hl.hi, 3)
         elif opcode.code == 0x9D: self.hl.lo = reset_bit(self.hl.lo, 3)
-        elif opcode.code == 0x9E: self._write_memory(self.hl.value, reset_bit(self._read_memory(self.hl.value), 3))
+        elif opcode.code == 0x9E:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, reset_bit(val, 3))
         elif opcode.code == 0x9F: self.af.hi = reset_bit(self.af.hi, 3)
         elif opcode.code == 0xA0: self.bc.hi = reset_bit(self.bc.hi, 4)
         elif opcode.code == 0xA1: self.bc.lo = reset_bit(self.bc.lo, 4)
@@ -1349,7 +1427,11 @@ class Cpu:
         elif opcode.code == 0xA3: self.de.lo = reset_bit(self.de.lo, 4)
         elif opcode.code == 0xA4: self.hl.hi = reset_bit(self.hl.hi, 4)
         elif opcode.code == 0xA5: self.hl.lo = reset_bit(self.hl.lo, 4)
-        elif opcode.code == 0xA6: self._write_memory(self.hl.value, reset_bit(self._read_memory(self.hl.value), 4))
+        elif opcode.code == 0xA6:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, reset_bit(val, 4))
         elif opcode.code == 0xA7: self.af.hi = reset_bit(self.af.hi, 4)
         elif opcode.code == 0xA8: self.bc.hi = reset_bit(self.bc.hi, 5)
         elif opcode.code == 0xA9: self.bc.lo = reset_bit(self.bc.lo, 5)
@@ -1357,7 +1439,11 @@ class Cpu:
         elif opcode.code == 0xAB: self.de.lo = reset_bit(self.de.lo, 5)
         elif opcode.code == 0xAC: self.hl.hi = reset_bit(self.hl.hi, 5)
         elif opcode.code == 0xAD: self.hl.lo = reset_bit(self.hl.lo, 5)
-        elif opcode.code == 0xAE: self._write_memory(self.hl.value, reset_bit(self._read_memory(self.hl.value), 5))
+        elif opcode.code == 0xAE:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, reset_bit(val, 5))
         elif opcode.code == 0xAF: self.af.hi = reset_bit(self.af.hi, 5)
         elif opcode.code == 0xB0: self.bc.hi = reset_bit(self.bc.hi, 6)
         elif opcode.code == 0xB1: self.bc.lo = reset_bit(self.bc.lo, 6)
@@ -1365,7 +1451,11 @@ class Cpu:
         elif opcode.code == 0xB3: self.de.lo = reset_bit(self.de.lo, 6)
         elif opcode.code == 0xB4: self.hl.hi = reset_bit(self.hl.hi, 6)
         elif opcode.code == 0xB5: self.hl.lo = reset_bit(self.hl.lo, 6)
-        elif opcode.code == 0xB6: self._write_memory(self.hl.value, reset_bit(self._read_memory(self.hl.value), 6))
+        elif opcode.code == 0xB6:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, reset_bit(val, 6))
         elif opcode.code == 0xB7: self.af.hi = reset_bit(self.af.hi, 6)
         elif opcode.code == 0xB8: self.bc.hi = reset_bit(self.bc.hi, 7)
         elif opcode.code == 0xB9: self.bc.lo = reset_bit(self.bc.lo, 7)
@@ -1373,7 +1463,11 @@ class Cpu:
         elif opcode.code == 0xBB: self.de.lo = reset_bit(self.de.lo, 7)
         elif opcode.code == 0xBC: self.hl.hi = reset_bit(self.hl.hi, 7)
         elif opcode.code == 0xBD: self.hl.lo = reset_bit(self.hl.lo, 7)
-        elif opcode.code == 0xBE: self._write_memory(self.hl.value, reset_bit(self._read_memory(self.hl.value), 7))
+        elif opcode.code == 0xBE:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, reset_bit(val, 7))
         elif opcode.code == 0xBF: self.af.hi = reset_bit(self.af.hi, 7)
         else: raise Exception(f"Unknown prefix operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
@@ -1429,7 +1523,12 @@ class Cpu:
         elif opcode.code == 0x03: self.de.lo = do_rl(self.de.lo)
         elif opcode.code == 0x04: self.hl.hi = do_rl(self.hl.hi)
         elif opcode.code == 0x05: self.hl.lo = do_rl(self.hl.lo)
-        elif opcode.code == 0x06: self._write_memory(self.hl.value, do_rl(self._read_memory(self.hl.value)))
+        elif opcode.code == 0x06:
+            # breakpoint()
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, do_rl(val))
         elif opcode.code == 0x07: self.af.hi = do_rl(self.af.hi)
         elif opcode.code == 0x10: self.bc.hi = do_rl(self.bc.hi)
         elif opcode.code == 0x11: self.bc.lo = do_rl(self.bc.lo)
@@ -1437,7 +1536,11 @@ class Cpu:
         elif opcode.code == 0x13: self.de.lo = do_rl(self.de.lo)
         elif opcode.code == 0x14: self.hl.hi = do_rl(self.hl.hi)
         elif opcode.code == 0x15: self.hl.lo = do_rl(self.hl.lo)
-        elif opcode.code == 0x16: self._write_memory(self.hl.value, do_rl(self._read_memory(self.hl.value)))
+        elif opcode.code == 0x16:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, do_rl(val))
         elif opcode.code == 0x17: self.af.hi = do_rl(self.af.hi)
         else: raise Exception(f"Unknown prefix operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
@@ -1535,7 +1638,11 @@ class Cpu:
         elif opcode.code == 0x0B: self.de.lo = do_rr(self.de.lo)
         elif opcode.code == 0x0C: self.hl.hi = do_rr(self.hl.hi)
         elif opcode.code == 0x0D: self.hl.lo = do_rr(self.hl.lo)
-        elif opcode.code == 0x0E: self._write_memory(self.hl.value, do_rr(self._read_memory(self.hl.value)))
+        elif opcode.code == 0x0E:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, do_rr(val))
         elif opcode.code == 0x0F: self.af.hi = do_rr(self.af.hi)
         elif opcode.code == 0x18: self.bc.hi = do_rr(self.bc.hi)
         elif opcode.code == 0x19: self.bc.lo = do_rr(self.bc.lo)
@@ -1543,7 +1650,11 @@ class Cpu:
         elif opcode.code == 0x1B: self.de.lo = do_rr(self.de.lo)
         elif opcode.code == 0x1C: self.hl.hi = do_rr(self.hl.hi)
         elif opcode.code == 0x1D: self.hl.lo = do_rr(self.hl.lo)
-        elif opcode.code == 0x1E: self._write_memory(self.hl.value, do_rr(self._read_memory(self.hl.value)))
+        elif opcode.code == 0x1E:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, do_rr(val))
         elif opcode.code == 0x1F: self.af.hi = do_rr(self.af.hi)
         else: raise Exception(f"Unknown prefix operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
@@ -1563,7 +1674,11 @@ class Cpu:
         elif opcode.code == 0xC3: self.de.lo = set_bit(self.de.lo, 0)
         elif opcode.code == 0xC4: self.hl.hi = set_bit(self.hl.hi, 0)
         elif opcode.code == 0xC5: self.hl.lo = set_bit(self.hl.lo, 0)
-        elif opcode.code == 0xC6: self._write_memory(self.hl.value, set_bit(self._read_memory(self.hl.value), 0))
+        elif opcode.code == 0xC6:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, set_bit(val, 0))
         elif opcode.code == 0xC7: self.af.hi = set_bit(self.af.hi, 0)
         elif opcode.code == 0xC8: self.bc.hi = set_bit(self.bc.hi, 1)
         elif opcode.code == 0xC9: self.bc.lo = set_bit(self.bc.lo, 1)
@@ -1571,7 +1686,11 @@ class Cpu:
         elif opcode.code == 0xCB: self.de.lo = set_bit(self.de.lo, 1)
         elif opcode.code == 0xCC: self.hl.hi = set_bit(self.hl.hi, 1)
         elif opcode.code == 0xCD: self.hl.lo = set_bit(self.hl.lo, 1)
-        elif opcode.code == 0xCE: self._write_memory(self.hl.value, set_bit(self._read_memory(self.hl.value), 1))
+        elif opcode.code == 0xCE:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, set_bit(val, 1))
         elif opcode.code == 0xCF: self.af.hi = set_bit(self.af.hi, 1)
         elif opcode.code == 0xD0: self.bc.hi = set_bit(self.bc.hi, 2)
         elif opcode.code == 0xD1: self.bc.lo = set_bit(self.bc.lo, 2)
@@ -1579,7 +1698,11 @@ class Cpu:
         elif opcode.code == 0xD3: self.de.lo = set_bit(self.de.lo, 2)
         elif opcode.code == 0xD4: self.hl.hi = set_bit(self.hl.hi, 2)
         elif opcode.code == 0xD5: self.hl.lo = set_bit(self.hl.lo, 2)
-        elif opcode.code == 0xD6: self._write_memory(self.hl.value, set_bit(self._read_memory(self.hl.value), 2))
+        elif opcode.code == 0xD6:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, set_bit(val, 2))
         elif opcode.code == 0xD7: self.af.hi = set_bit(self.af.hi, 2)
         elif opcode.code == 0xD8: self.bc.hi = set_bit(self.bc.hi, 3)
         elif opcode.code == 0xD9: self.bc.lo = set_bit(self.bc.lo, 3)
@@ -1587,7 +1710,11 @@ class Cpu:
         elif opcode.code == 0xDB: self.de.lo = set_bit(self.de.lo, 3)
         elif opcode.code == 0xDC: self.hl.hi = set_bit(self.hl.hi, 3)
         elif opcode.code == 0xDD: self.hl.lo = set_bit(self.hl.lo, 3)
-        elif opcode.code == 0xDE: self._write_memory(self.hl.value, set_bit(self._read_memory(self.hl.value), 3))
+        elif opcode.code == 0xDE:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, set_bit(val, 3))
         elif opcode.code == 0xDF: self.af.hi = set_bit(self.af.hi, 3)
         elif opcode.code == 0xE0: self.bc.hi = set_bit(self.bc.hi, 4)
         elif opcode.code == 0xE1: self.bc.lo = set_bit(self.bc.lo, 4)
@@ -1595,7 +1722,11 @@ class Cpu:
         elif opcode.code == 0xE3: self.de.lo = set_bit(self.de.lo, 4)
         elif opcode.code == 0xE4: self.hl.hi = set_bit(self.hl.hi, 4)
         elif opcode.code == 0xE5: self.hl.lo = set_bit(self.hl.lo, 4)
-        elif opcode.code == 0xE6: self._write_memory(self.hl.value, set_bit(self._read_memory(self.hl.value), 4))
+        elif opcode.code == 0xE6:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, set_bit(val, 4))
         elif opcode.code == 0xE7: self.af.hi = set_bit(self.af.hi, 4)
         elif opcode.code == 0xE8: self.bc.hi = set_bit(self.bc.hi, 5)
         elif opcode.code == 0xE9: self.bc.lo = set_bit(self.bc.lo, 5)
@@ -1603,7 +1734,11 @@ class Cpu:
         elif opcode.code == 0xEB: self.de.lo = set_bit(self.de.lo, 5)
         elif opcode.code == 0xEC: self.hl.hi = set_bit(self.hl.hi, 5)
         elif opcode.code == 0xED: self.hl.lo = set_bit(self.hl.lo, 5)
-        elif opcode.code == 0xEE: self._write_memory(self.hl.value, set_bit(self._read_memory(self.hl.value), 5))
+        elif opcode.code == 0xEE:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, set_bit(val, 5))
         elif opcode.code == 0xEF: self.af.hi = set_bit(self.af.hi, 5)
         elif opcode.code == 0xF0: self.bc.hi = set_bit(self.bc.hi, 6)
         elif opcode.code == 0xF1: self.bc.lo = set_bit(self.bc.lo, 6)
@@ -1611,7 +1746,11 @@ class Cpu:
         elif opcode.code == 0xF3: self.de.lo = set_bit(self.de.lo, 6)
         elif opcode.code == 0xF4: self.hl.hi = set_bit(self.hl.hi, 6)
         elif opcode.code == 0xF5: self.hl.lo = set_bit(self.hl.lo, 6)
-        elif opcode.code == 0xF6: self._write_memory(self.hl.value, set_bit(self._read_memory(self.hl.value), 6))
+        elif opcode.code == 0xF6:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, set_bit(val, 6))
         elif opcode.code == 0xF7: self.af.hi = set_bit(self.af.hi, 6)
         elif opcode.code == 0xF8: self.bc.hi = set_bit(self.bc.hi, 7)
         elif opcode.code == 0xF9: self.bc.lo = set_bit(self.bc.lo, 7)
@@ -1619,7 +1758,11 @@ class Cpu:
         elif opcode.code == 0xFB: self.de.lo = set_bit(self.de.lo, 7)
         elif opcode.code == 0xFC: self.hl.hi = set_bit(self.hl.hi, 7)
         elif opcode.code == 0xFD: self.hl.lo = set_bit(self.hl.lo, 7)
-        elif opcode.code == 0xFE: self._write_memory(self.hl.value, set_bit(self._read_memory(self.hl.value), 7))
+        elif opcode.code == 0xFE:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, set_bit(val, 7))
         elif opcode.code == 0xFF: self.af.hi = set_bit(self.af.hi, 7)
         else: raise Exception(f"Unknown prefix operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
@@ -1663,7 +1806,11 @@ class Cpu:
         elif opcode.code == 0x23: self.de.lo = do_shift_left(self.de.lo)
         elif opcode.code == 0x24: self.hl.hi = do_shift_left(self.hl.hi)
         elif opcode.code == 0x25: self.hl.lo = do_shift_left(self.hl.lo)
-        elif opcode.code == 0x26: self._write_memory(self.hl.value, do_shift_left(self._read_memory(self.hl.value)))
+        elif opcode.code == 0x26:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, do_shift_left(val))
         elif opcode.code == 0x27: self.af.hi = do_shift_left(self.af.hi)
         else: raise Exception(f"Unknown prefix operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
@@ -1697,7 +1844,11 @@ class Cpu:
         elif opcode.code == 0x2B: self.de.lo = do_shift_right(self.de.lo)
         elif opcode.code == 0x2C: self.hl.hi = do_shift_right(self.hl.hi)
         elif opcode.code == 0x2D: self.hl.lo = do_shift_right(self.hl.lo)
-        elif opcode.code == 0x2E: self._write_memory(self.hl.value, do_shift_right(self._read_memory(self.hl.value)))
+        elif opcode.code == 0x2E:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, do_shift_right(val))
         elif opcode.code == 0x2F: self.af.hi = do_shift_right(self.af.hi)
         elif opcode.code == 0x38: self.bc.hi = do_shift_right(self.bc.hi)
         elif opcode.code == 0x39: self.bc.lo = do_shift_right(self.bc.lo)
@@ -1705,7 +1856,11 @@ class Cpu:
         elif opcode.code == 0x3B: self.de.lo = do_shift_right(self.de.lo)
         elif opcode.code == 0x3C: self.hl.hi = do_shift_right(self.hl.hi)
         elif opcode.code == 0x3D: self.hl.lo = do_shift_right(self.hl.lo)
-        elif opcode.code == 0x3E: self._write_memory(self.hl.value, do_shift_right(self._read_memory(self.hl.value)))
+        elif opcode.code == 0x3E:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, do_shift_right(val))
         elif opcode.code == 0x3F: self.af.hi = do_shift_right(self.af.hi)
         else: raise Exception(f"Unknown prefix operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 
@@ -1773,7 +1928,11 @@ class Cpu:
         elif opcode.code == 0x33: self.de.lo = do_swap(self.de.lo)
         elif opcode.code == 0x34: self.hl.hi = do_swap(self.hl.hi)
         elif opcode.code == 0x35: self.hl.lo = do_swap(self.hl.lo)
-        elif opcode.code == 0x36: self._write_memory(self.hl.value, do_swap(self._read_memory(self.hl.value)))
+        elif opcode.code == 0x36:
+            self._sync_cycles(4)
+            val = self._read_memory(self.hl.value)
+            self._sync_cycles(4)
+            self._write_memory(self.hl.value, do_swap(val))
         elif opcode.code == 0x37: self.af.hi = do_swap(self.af.hi)
         else: raise Exception(f"Unknown prefix operation encountered 0x{format(opcode.code, '02x')} - {opcode.mnemonic}")
 

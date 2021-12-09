@@ -1,5 +1,4 @@
 from constants import INTERRUPT_ENABLE_ADDR, INTERRUPT_FLAG_ADDR
-from cpu import Cpu
 from mmu import Mmu
 from utils import Interrupt, is_bit_set, set_bit
 
@@ -9,13 +8,12 @@ class InterruptControl:
     A general purpose class to control interrupt logic for PyBoy
     '''
 
-    def __init__(self, mmu: Mmu, cpu: Cpu):
+    def __init__(self, mmu: Mmu):
         self.mmu = mmu
-        self.cpu = cpu
 
-    def service_interrupts(self) -> int:
+    def get_servicable_interrupt(self) -> Interrupt:
         '''
-        Service interrupts in order of priority, if enabled and requested
+        Return the next interrupt to service in order of priority, if enabled and requested
 
         :return the number of cycles necessary to perform a service
         '''
@@ -28,9 +26,9 @@ class InterruptControl:
 
             # if the interrupt is requested and enabled, we can tell the CPU to handle it
             if self.is_interrupt_enabled(interrupt) and self.is_interrupt_requested(interrupt):
-                return self.cpu.service_interrupt(interrupt)
+                return interrupt
 
-        return 0
+        return None
 
     def request_interrupt(self, interrupt: Interrupt):
         '''
@@ -40,13 +38,6 @@ class InterruptControl:
         interrupts_requested = self.mmu.read_byte(INTERRUPT_FLAG_ADDR)
         interrupts_requested = set_bit(interrupts_requested, interrupt.value)
         self.mmu.write_byte(INTERRUPT_FLAG_ADDR, interrupts_requested)
-
-    def is_interrupt_master_enabled(self) -> bool:
-        '''
-        Return whether or not the CPU has enabled or disabled interrupts
-        '''
-
-        return self.cpu.is_interrupts_enabled()
 
     def is_interrupt_enabled(self, interrupt: Interrupt) -> bool:
         '''
