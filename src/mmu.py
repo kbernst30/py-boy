@@ -169,8 +169,7 @@ class Mmu:
             self.memory[addr] = 0
 
         elif addr == 0xFF46:
-            pass
-            # print("DMA TRANSFER")
+            self._do_dma_transfer(data)
 
         elif addr == TIMER_CONTROL_ADDR:
             # If we are changing the data of the timer controller, then the timer itself will need
@@ -319,8 +318,27 @@ class Mmu:
 
         elif addr >= 0x4000 and addr < 0x6000:
             # TODO deal with other bits for MBC 1
+            # pass
             print("HI BITS")
 
         elif addr >= 0x6000 and addr < 0x8000:
             # TODO deal with MBC 1 Banking mode
+            # pass
             print("BANK MODE")
+
+    def _do_dma_transfer(self, data: int):
+        '''
+        When writing to register 0xFF46, copy data from RAM/ROM to Object Attribute
+        Memory (OAM - FE00 - FE9F)
+
+        We want to copy starting at source address (data) multipled by $100 (256) - this
+        is because this data is supposed to be the source / 0x100
+
+        This source becomes address $XX00-$XX9F where XX is determined by that data value
+        '''
+
+        start_addr = data * 0x100
+
+        for i in range(0xA0):
+            # Range should be to 0xA0 as it is inclusive of value 0x9F this way
+            self.memory[0xFE00 + i] = self.memory[start_addr + i]

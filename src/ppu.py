@@ -11,7 +11,9 @@ from constants import (
     MAX_CYCLES_PER_FRAME,
     MAX_SCANLINE_VALUE,
     SCREEN_HEIGHT,
-    SCREEN_WIDTH
+    SCREEN_WIDTH,
+    WINDOW_POS_X,
+    WINDOW_POS_Y
 )
 from interrupts import InterruptControl
 from mmu import Mmu
@@ -78,6 +80,35 @@ class LcdControl:
         '''
 
         return is_bit_set(self.memory.read_byte(LCD_CONTROL_ADDR), 5)
+
+    def get_window_tile_map_area(self) -> int:
+        '''
+        Gets the starting address of the current window tile map
+        '''
+
+        return 0x9C00 if is_bit_set(self.memory.read_byte(LCD_CONTROL_ADDR), 6) else 0x9800
+
+    def is_sprites_enabled(self) -> bool:
+        '''
+        Return True if the Sprites are currently enabled and should be drawn
+        '''
+
+        return is_bit_set(self.memory.read_byte(LCD_CONTROL_ADDR), 1)
+
+    def get_sprite_height(self) -> int:
+        '''
+        Return the sprite height determined by LCD control, either 8 or 16
+        giving us either 8x8 sprites or 8x16 sprites
+        '''
+
+        return 16 if is_bit_set(self.memory.read_byte(LCD_CONTROL_ADDR), 2) else 8
+
+    def get_sprite_tile_data_area(self) -> int:
+        '''
+        Get the start address for the sprite tiles
+        '''
+
+        return 0x8000
 
 
 class LcdStatus:
@@ -167,6 +198,31 @@ class LcdStatus:
             status = reset_bit(status, 2)
 
         self.set_status(status)
+
+
+class SpriteAttributes:
+    '''
+    Each sprite has a register denoting attributes that define how the sprite
+    behaves and is drawn to screen. The bits are as follows:
+      7 - BG and Window over OBJ (0=No, 1=BG and Window colors 1-3 over the OBJ)
+      6 - Y Flip - 0=Normal, 1=Vertically mirrored
+      5 - X Flip - 0=Normal, 1=Horizontally mirrored
+      4 - Palette Number - 0=OBP0, 1=OBP1 - Only used on Non-Color GB
+
+      The other bits are for CGB only and we will revisit if we implement Color
+    '''
+
+    def __init__(self, register):
+        self.register = register
+
+    def is_sprite_under_background(self) -> bool:
+        return is_bit_set(self.register, 7)
+
+    def is_y_flip(self) -> bool:
+        return is_bit_set(self.register, 6)
+
+    def is_x_flip(self) -> bool:
+        return is_bit_set(self.register, 5)
 
 
 class Ppu:
@@ -297,9 +353,6 @@ class Ppu:
 
                 should_request_stat_interrupt = self.lcd_status.is_hblank_stat_interrupt_enabled()
 
-        # TODO some other interrupts we might need to request here - If mode changed
-        # or if Compare scanline is same as current scanline
-
         # IF we changed mode and should interrupt, do it
         if current_mode != self.lcd_status.get_mode() and should_request_stat_interrupt:
             self.interrupts.request_interrupt(Interrupt.LCD_STAT)
@@ -321,7 +374,8 @@ class Ppu:
         if self.is_background_enabled():
             self._render_background()
 
-        # TODO sprites
+        if self.is_sprites_enabled():
+            self._render_sprites()
 
     def get_tiles(self):
         '''
@@ -373,7 +427,14 @@ class Ppu:
         for i in range(0, SCREEN_WIDTH):
             x = self.get_background_scroll_x() + i
 
-            tile_map_addr = self.lcd_control.get_background_tile_map_area()
+            tile_map_addr = self.lcd_control.get_window_tile_map_area() \
+                if self.should_draw_window() else self.lcd_control.get_background_tile_map_area()
+
+            # If we should draw the window and this pixel is within the range of the window,
+            # then adjust the offset accordingly with the window X position
+            if self.should_draw_window() and i >= self.get_window_position_x():
+                x = i - self.get_window_position_x()
+
             x_offset = int(x / 8)
             y_offset = int(y / 8) * 32
 
@@ -388,6 +449,9 @@ class Ppu:
 
     def is_background_enabled(self) -> bool:
         return self.lcd_control.is_background_enabled()
+
+    def is_sprites_enabled(self) -> bool:
+        return self.lcd_control.is_sprites_enabled()
 
     def get_background_tile_map(self) -> "list[int]":
         '''
@@ -418,6 +482,31 @@ class Ppu:
         '''
 
         return self.memory.read_byte(BACKGROUND_SCROLL_Y)
+
+    def get_window_position_x(self) -> int:
+        '''
+        Get the X position of the Window
+        Remember the value in the WX register is offset by 7
+        '''
+
+        return self.memory.read_byte(WINDOW_POS_X) - 7
+
+    def get_window_position_y(self) -> int:
+        '''
+        Get the Y position of the Window
+        '''
+
+        return self.memory.read_byte(WINDOW_POS_Y)
+
+    def should_draw_window(self) -> bool:
+        '''
+        We should draw the Window instead of the background under a few conditions:
+        1. If the Window is enabled in Bit 5 of the LCD COntrol register
+        2. If the Window top-left position (i.e. WY) is above the current scanline
+            - This would mean that we are currently drawing somewhere the Window is positioned
+        '''
+
+        return self.lcd_control.is_window_enabled() and self.get_window_position_y() <= self.get_current_scanline()
 
     def _get_tile_line_pixel(self, tile_identifier: int, offset: int, x: int) -> int:
         '''
@@ -470,12 +559,14 @@ class Ppu:
         return GB_COLORS[color]
 
     def _render_background(self):
-        # TODO deal with the Window
-
         current_scanline = self.get_current_scanline()
 
         def get_pixels():
-            y_pos = (self.get_background_scroll_y() + current_scanline) & 0xFF
+            if self.should_draw_window():
+                y_pos = (current_scanline - self.get_window_position_y()) & 0xFF
+            else:
+                y_pos = (self.get_background_scroll_y() + current_scanline) & 0xFF
+
             return self.get_background_tile_pixels(y_pos)
 
         # Get all the pixels needed for a given scanline
@@ -485,3 +576,61 @@ class Ppu:
             if current_scanline < SCREEN_HEIGHT and current_scanline > 0:
                 self.screen[i][current_scanline] = pixel
                 i += 1
+
+    def _render_sprites(self):
+
+        # Sprite data will be copied into OAM and there are 40 sprites in
+        # total. We need to look at them all to get there data (i.e. position)
+        # and then look up the tiles to draw from there
+
+        oam_addr = 0xFE00
+        current_scanline = self.get_current_scanline()
+        for i in range(40):
+            # Each sprite occupies 4 bytes in OAM, This info is taken from pan docs
+            # Byte 0 = Y Position + 16
+            # Byte 1 = X Position + 8
+            # Byte 2 = Tile Index in Tile memory (i.e. 0x8000 + x)
+            # Byte 3 = Sprite Attributes
+            start_addr = oam_addr + (i * 4)
+            y_position = self.memory.read_byte(start_addr) - 16
+            x_position = self.memory.read_byte(start_addr + 1) - 8
+            tile_idx = self.memory.read_byte(start_addr + 2)
+            attributes = SpriteAttributes(self.memory.read_byte(start_addr + 3))
+
+            sprite_height = self.lcd_control.get_sprite_height()
+
+            # We need to draw this sprite if it is currently on the scanline we are looking at
+            if current_scanline >= y_position and current_scanline < y_position + sprite_height:
+
+                # Get the current line of sprite
+                line = current_scanline - y_position
+
+                # Remember each tile (sprite or background) has two bytes of memory
+                # So do this to get the appropriate address
+                line *= 2
+
+                # Recall each tile occupies 16 bytes, and so
+                # each line in the sprite is 2 bytes long
+                tile_line_addr = self.lcd_control.get_sprite_tile_data_area() + (tile_idx * 16) + line
+                lo = self.memory.read_byte(tile_line_addr)
+                hi = self.memory.read_byte(tile_line_addr + 1)
+
+                for j in range(7, -1, -1):
+                    color = self._get_color(lo, hi, j)
+
+                    # Sprites have "white" as transparent instead of "white", so skip
+                    # this pixel
+                    if color == 0xFFFFFF:
+                        continue
+
+                    pixel_x = 7 - j + x_position
+
+                    if current_scanline < 0 or current_scanline >= SCREEN_HEIGHT or pixel_x < 0 or pixel_x >= SCREEN_WIDTH:
+                        # If we are outside the visible screen do not set data in the screen data as it will error
+                        continue
+
+                    # Sprite is only hidden under the background for colors 1 - 3 (so not white)
+                    if attributes.is_sprite_under_background() and self.screen[pixel_x][current_scanline] != 0xFFFFFF:
+                        continue
+
+                    self.screen[pixel_x][current_scanline] = color
