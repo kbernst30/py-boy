@@ -2,10 +2,12 @@ import sys
 import pyglet
 
 from pyglet import shapes
+from pyglet.window import key
 
 from constants import DISPLAY_FACTOR, SCREEN_HEIGHT, SCREEN_WIDTH
 
 from pyboy import PyBoy
+from utils import Button
 
 
 pyboy = PyBoy()
@@ -115,6 +117,45 @@ def on_main_draw():
     batch.draw()
     fps_display.draw()
 
+
+@main_window.event
+def on_key_press(symbol, modifiers):
+    if symbol == key.RIGHT:
+        pyboy.set_button_state(Button.RIGHT)
+    elif symbol == key.LEFT:
+        pyboy.set_button_state(Button.LEFT)
+    elif symbol == key.UP:
+        pyboy.set_button_state(Button.UP)
+    elif symbol == key.DOWN:
+        pyboy.set_button_state(Button.DOWN)
+    elif symbol == key.Z:
+        pyboy.set_button_state(Button.A)
+    elif symbol == key.X:
+        pyboy.set_button_state(Button.B)
+    elif symbol == key.ENTER:
+        pyboy.set_button_state(Button.START)
+    elif symbol == key.RSHIFT:
+        pyboy.set_button_state(Button.SELECT)
+
+
+@main_window.event
+def on_key_release(symbol, modifiers):
+    if symbol == key.RIGHT:
+        pyboy.reset_button_state(Button.RIGHT)
+    elif symbol == key.LEFT:
+        pyboy.reset_button_state(Button.LEFT)
+    elif symbol == key.UP:
+        pyboy.reset_button_state(Button.UP)
+    elif symbol == key.DOWN:
+        pyboy.reset_button_state(Button.DOWN)
+    elif symbol == key.Z:
+        pyboy.reset_button_state(Button.A)
+    elif symbol == key.X:
+        pyboy.reset_button_state(Button.B)
+    elif symbol == key.ENTER:
+        pyboy.reset_button_state(Button.START)
+    elif symbol == key.RSHIFT:
+        pyboy.reset_button_state(Button.SELECT)
 
 # @vram_viewer.event("on_draw")
 # def on_vram_draw():

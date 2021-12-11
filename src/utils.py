@@ -16,6 +16,22 @@ class Interrupt(IntEnum):
     JOYPAD = 4
 
 
+class Button(Enum):
+    RIGHT = 0
+    LEFT = 1
+    DOWN = 2
+    UP = 3
+    A = 4
+    B = 5
+    START = 6
+    SELECT = 7
+
+
+class JoypadMode(Enum):
+    ACTION = 0
+    DIRECTION = 1
+
+
 class CartridgeType(Enum):
     ROM_ONLY = 0
     MBC_1 = 1

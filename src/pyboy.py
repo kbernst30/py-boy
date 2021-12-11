@@ -6,10 +6,12 @@ from constants import MAX_CYCLES_PER_FRAME
 
 from cpu import Cpu
 from interrupts import InterruptControl
+from joypad import Joypad
 from mmu import Mmu
 from ppu import Ppu
 from rom import Rom
 from timers import TimerControl
+from utils import Button
 
 
 logger = logging.getLogger(__name__)
@@ -18,7 +20,8 @@ logger = logging.getLogger(__name__)
 class PyBoy:
 
     def __init__(self):
-        self.mmu = Mmu()
+        self.joypad = Joypad()
+        self.mmu = Mmu(self.joypad)
         self.interrupts = InterruptControl(self.mmu)
         self.timers = TimerControl(self.mmu, self.interrupts)
         self.ppu = Ppu(self.mmu, self.interrupts)
@@ -60,6 +63,12 @@ class PyBoy:
 
     def get_tiles(self):
         return self.ppu.get_tiles()
+
+    def set_button_state(self, button: Button):
+        self.joypad.set_button_state(button)
+
+    def reset_button_state(self, button: Button):
+        self.joypad.reset_button_state(button)
 
     def exit(self, exit_code=0):
         sys.exit(exit_code)

@@ -3,13 +3,16 @@ import logging
 from constants import (
     CURRENT_SCANLINE_ADDR,
     DIVIDER_REGISTER_ADDR,
+    JOYPAD_REGISTER_ADDR,
     MAXIMUM_RAM_BANKS,
     RAM_BANK_SIZE,
     TIMER_ADDR,
     TIMER_CONTROL_ADDR
 )
+from joypad import Joypad
 
 from rom import Rom
+from utils import JoypadMode, is_bit_set
 
 
 logger = logging.getLogger(__name__)
@@ -34,7 +37,9 @@ class Mmu:
 
     MEMORY_SIZE = 0x10000
 
-    def __init__(self):
+    def __init__(self, joypad: Joypad):
+
+        self.joypad = joypad
 
         self.memory = [0 for _ in range(self.MEMORY_SIZE)]
 
@@ -101,7 +106,8 @@ class Mmu:
         self.memory[0xFF4B] = 0x00
         self.memory[0xFFFF] = 0x00
 
-        self.memory[0xFF00] = 0xFF  # JOYPAD TODO WHY?
+        # THis iniital state of the joypad is all unpressed
+        self.memory[JOYPAD_REGISTER_ADDR] = 0xFF
 
         self.rom_bank = 1
 
@@ -158,11 +164,22 @@ class Mmu:
             if self.enable_ram:
                 print("RAM")
 
-        elif addr >= 0xFEA0 and addr < 0xFF00 or addr == 0xFF00:
+        elif addr >= 0xFEA0 and addr < 0xFF00:
             # Restricted area - do NOT allow writing
             # TODO FF00 is not restricted - but joypad is not implemented yet so don't allow modification
             pass
             # logger.warn(f"Attempted write to restricted addr - 0x{format(addr, '0x')}")
+
+        elif addr == JOYPAD_REGISTER_ADDR:
+            # buttons =
+            mode = None
+            if not is_bit_set(data, 5):
+                mode = JoypadMode.ACTION
+            elif not is_bit_set(data, 4):
+                mode = JoypadMode.DIRECTION
+
+            lower_nibble = self.joypad.get_buttons_for_mode(mode)
+            self.memory[addr] = (data & 0xF0) | lower_nibble
 
         elif addr == DIVIDER_REGISTER_ADDR or addr == CURRENT_SCANLINE_ADDR:
             # We cannot write here directly - reset to 0
